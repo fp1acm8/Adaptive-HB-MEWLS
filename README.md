@@ -3,17 +3,57 @@ MATLAB implementation of Hierarchical B-splines (HB-splines) with adaptive refin
 The project explores entropy-based weighting strategies for local approximation and adaptive mesh refinement, aiming to improve numerical stability and accuracy in spline-based geometric modeling and numerical analysis.
 
 ## Features
-- Construction of HB-splines basis with hierarchical refinement
-- Weighted Least Squares fitting using Maximum Entropy weights
-- Adaptive refinement guided by local error and weight distribution
-- Visualization tools for datasets, hierarchical meshes, and fitting results
-- Modular structure for future extensions (THB-splines, multi-dimensional fitting, etc.)
+- Lightweight comparison harness for LS vs MEWLS-inspired polynomial
+  solvers.
+- Configurable experiments with JSON-driven dataset, noise, and solver
+  definitions.
+- Reusable utilities for loading datasets, injecting noise, and exporting
+  rich visual summaries.
+- Clean MATLAB package layout that makes it straightforward to introduce
+  additional solver variants.
+
+## Quick start
+
+The repository is organised around a single comparison harness and a
+handful of reusable utilities. A typical MATLAB session looks like:
+
+```matlab
+cd /path/to/Adaptive-HB-MEWLS
+addpath('scripts');
+run_comparison();
+```
+
+`run_comparison` automatically adds `src/` to the MATLAB path and, when
+called without arguments, loads the default configuration found at
+`config/comparison_config.json`.
+
+To compare a different set of solvers or datasets, copy the JSON file,
+adjust the fields you need, and pass the new path:
+
+```matlab
+run_comparison('config/my_experiment.json');
+```
+
+The helper [`scripts/generate_noisy_dataset.m`](scripts/generate_noisy_dataset.m)
+is available for interactively corrupting an existing clean dataset using
+the same noise utilities employed by the harness.
+
+## Repository layout
+
+- `config/` – JSON templates describing datasets, solver lists, and
+  metrics.
+- `data/` – Sample datasets used in the published experiments.
+- `scripts/` – Entry points such as `run_comparison.m` and dataset
+  preparation utilities.
+- `src/` – MATLAB package (`+adaptivehb`) containing solvers, I/O helpers,
+  and visualisation routines consumed by the harness.
+- `reports/` – Created on demand; each run of the harness writes its
+  outputs to a timestamped subfolder.
 
 ## Comparison harness
 
-The repository now includes a lightweight harness for comparing solver
-variants under common conditions. The entry point is
-[`scripts/run_comparison.m`](scripts/run_comparison.m), which
+[`scripts/run_comparison.m`](scripts/run_comparison.m) orchestrates the
+entire experiment:
 
 1. loads a JSON configuration describing the dataset, optional noise
    perturbations, and solver definitions;
@@ -23,16 +63,8 @@ variants under common conditions. The entry point is
 4. emits figures and tabular summaries inside a timestamped directory
    under `reports/`.
 
-Run the default experiment from the repository root with:
-
-```matlab
-addpath('scripts');
-run_comparison();
-```
-
-Both commands rely on the default configuration stored in
-`config/comparison_config.json`. To launch a custom experiment, copy the
-file, adjust the fields, and pass the new path to `run_comparison`.
+All figures and tables are written to `reports/comparison_<timestamp>/` so
+multiple experiments can coexist without manual bookkeeping.
 
 ### Generated artefacts
 
@@ -49,25 +81,20 @@ Each execution creates `reports/comparison_<timestamp>/` containing:
 - `dataset_snapshot.mat`: a copy of the dataset struct actually consumed
   during the run (after normalisation/noise injection).
 
-### Customising datasets and noise scenarios
+### Configuration reference
 
-The JSON configuration exposes three key sections:
+The configuration file is a plain JSON document with four top-level
+sections:
 
-- `dataset`: provide a path to any supported dataset (three-column clean
-  files or five-column files with explicit noise/outlier annotations) and
-  opt into coordinate normalisation via `"normalize": true`.
-- `noise`: select `"type": "none"` to keep the dataset untouched or use
-  `"gaussian"` with additional parameters (`standardDeviation`,
-  `outlierFraction`, `outlierInflation`, `seed`) to generate reproducible
-  perturbations.
-- `solvers`: list solver entries with a user-facing `name`, the fully
-  qualified MATLAB function to call, and optional parameter structs. New
-  solvers can be integrated by implementing a function that accepts the
-  dataset struct and a parameter struct and returns a result struct with
-  `name`, `prediction`, `metrics`, and `convergence` fields.
+| Section     | Required keys | Notes |
+|-------------|---------------|-------|
+| `dataset`   | `path`        | Absolute or relative path to a text file with either three columns (clean data) or five columns (true/observed values plus an outlier flag). Optional `normalize` (default `true`) rescales coordinates to `[0, 1]^2`. |
+| `noise`     | `type`        | Use `"none"` to keep the dataset untouched or `"gaussian"` together with `standardDeviation`, `outlierFraction`, `outlierInflation`, and `seed` to apply reproducible perturbations. |
+| `solvers`   | –             | Array of solver specs, each with `name`, the fully qualified MATLAB function handle (for example `"adaptivehb.solvers.mewlsSolver"`), and an optional `parameters` struct passed through verbatim. |
+| `metrics`   | –             | List of metric names to include in the output tables. The stock solvers expose `rmse`, `maxAbsError`, and `mae`. |
 
-Additions or modifications to these sections are automatically picked up
-by the harness—no changes to `run_comparison.m` are required.
+Any additional fields are preserved and handed to the respective
+functions, making it easy to extend the harness with custom behaviour.
 
 ## Author
 Francesco Pucci  
