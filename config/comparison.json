@@ -1,0 +1,54 @@
+{
+  "dataset": {
+    "root": "data",
+    "filename": "example13_dataset_noise_gauss_frac0.05_int0.10_seed18.txt",
+    "has_outliers": true
+  },
+  "noise": {
+    "type": "gaussian",
+    "description": "fraction 0.05, intensity 0.10",
+    "seed": 18
+  },
+  "output": {
+    "root": "output",
+    "ls_results": "output/ls",
+    "mewls_results": "output/mewls"
+  },
+  "method": {
+    "degree": [2, 2],
+    "regularity": [1, 1],
+    "nsub_coarse": [16, 8],
+    "nsub_refine": [2, 2],
+    "nquad": [3, 3],
+    "space_type": "standard",
+    "truncated": 1
+  },
+  "adaptivity": {
+    "flag": "functions",
+    "mark_param": 0.5,
+    "mark_strategy": "MS",
+    "max_level": 6,
+    "max_ndof": 50000,
+    "num_max_iter": 15,
+    "max_nel": 50000,
+    "tol": 0.005,
+    "adm": 0
+  },
+  "solvers": {
+    "ls": {
+      "lambda_pen": 1e-12,
+      "debug": true
+    },
+    "mewls": {
+      "lambda_smooth": 1e-12,
+      "w_floor": 1e-12,
+      "opts_me": {
+        "r": 2,
+        "tol": 0.0001,
+        "max_iter": 100,
+        "min_iter": 3,
+        "verbose": true
+      }
+    }
+  }
+}
