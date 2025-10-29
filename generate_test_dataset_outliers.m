@@ -7,6 +7,17 @@
 clearvars; close all; clc;
 format long;
 
+% Ensure the reusable functions are on the MATLAB path
+script_dir = fileparts(mfilename('fullpath'));
+src_path = fullfile(script_dir, 'src');
+if ~isfolder(src_path)
+    src_path = fullfile(script_dir, '..', 'src');
+end
+if ~isfolder(src_path)
+    error('Impossibile trovare la cartella src contenente le funzioni ausiliarie.');
+end
+addpath(src_path);
+
 %% ================== INPUT UTENTE PER PARAMETRI ==================
 % Parametri generali
 n_points = input('Dimensione griglia (es. 150 per 150x150): ', 's');
@@ -55,8 +66,16 @@ if add_noise == 1
     if isempty(noise_type)
         noise_type = 'gauss';
     end
+    noise_settings = struct( ...
+        'addNoise', true, ...
+        'outlierFraction', outlier_fraction, ...
+        'outlierIntensity', outlier_intensity, ...
+        'seed', seed, ...
+        'noiseType', noise_type ...
+    );
 else
     add_noise = 0;
+    noise_settings = struct('addNoise', false);
 end
 
 %% ================== GENERAZIONE DATASET ==================
@@ -89,35 +108,23 @@ if generate11
     fprintf('Numero di punti: %d\n', size(data_ex, 1));
     fprintf('Range valori f: [%.6f, %.6f]\n', min(f11(:)), max(f11(:)));
     
+    f11_vector = f11(:);
+    f11_noisy = f11_vector;
+    is_outlier11 = zeros(numel(f11_vector), 1);
+
     % Genera e salva versione rumorosa (se richiesta)
     if add_noise
-        rng(seed);  % Per riproducibilità
-        M = numel(f11);
-        range_f = max(f11(:)) - min(f11(:));
-        num_outliers = round(outlier_fraction * M);
-        outlier_idx = randperm(M, num_outliers);
-        is_outlier11 = zeros(M, 1);
-        is_outlier11(outlier_idx) = 1;
-        
-        f11_noisy = f11(:);
-        if strcmp(noise_type, 'gauss')
-            noise = outlier_intensity * range_f * randn(num_outliers, 1);
-        elseif strcmp(noise_type, 'spike')
-            noise = outlier_intensity * range_f * (2 * rand(num_outliers, 1) - 1);
-        else
-            error('Tipo di rumore non supportato');
-        end
-        f11_noisy(outlier_idx) = f11_noisy(outlier_idx) + noise;
-        
-        data_noisy = [X11(:), Y11(:), f11(:), f11_noisy, is_outlier11];
-        
-        % Nome file con info rumore
-        noise_info = sprintf('_noise_%s_frac%.2f_int%.2f_seed%d', noise_type, outlier_fraction, outlier_intensity, seed);
-        filename_noisy11 = fullfile(output_dir, ['example11_dataset' noise_info '.txt']);
+        [augmented11, metadata11] = adaptivehb.data.apply_noise(X11(:), Y11(:), f11_vector, noise_settings);
+        f11_noisy = augmented11.fNoisy;
+        is_outlier11 = augmented11.isOutlier;
+        data_noisy = [augmented11.x, augmented11.y, augmented11.fTrue, augmented11.fNoisy, augmented11.isOutlier];
+
+        filename_noisy11 = fullfile(output_dir, ...
+            adaptivehb.data.format_noise_filename('example11_dataset', metadata11));
         save_dataset(filename_noisy11, data_noisy, true);  % Con mark
-        
+
         fprintf('Dataset rumoroso salvato in: %s\n', filename_noisy11);
-        fprintf('Numero di outliers: %d (%.2f%%)\n', num_outliers, outlier_fraction*100);
+        fprintf('Numero di outliers: %d (%.2f%%)\n', metadata11.numOutliers, metadata11.actualOutlierFraction * 100);
         fprintf('Range valori f_noisy: [%.6f, %.6f]\n', min(f11_noisy), max(f11_noisy));
     end
 end
@@ -153,35 +160,23 @@ if generate13
     fprintf('Numero di punti: %d\n', size(data_ex, 1));
     fprintf('Range valori f: [%.6f, %.6f]\n', min(f13(:)), max(f13(:)));
     
+    f13_vector = f13(:);
+    f13_noisy = f13_vector;
+    is_outlier13 = zeros(numel(f13_vector), 1);
+
     % Genera e salva versione rumorosa (se richiesta)
     if add_noise
-        rng(seed);  % Per riproducibilità
-        M = numel(f13);
-        range_f = max(f13(:)) - min(f13(:));
-        num_outliers = round(outlier_fraction * M);
-        outlier_idx = randperm(M, num_outliers);
-        is_outlier13 = zeros(M, 1);
-        is_outlier13(outlier_idx) = 1;
-        
-        f13_noisy = f13(:);
-        if strcmp(noise_type, 'gauss')
-            noise = outlier_intensity * range_f * randn(num_outliers, 1);
-        elseif strcmp(noise_type, 'spike')
-            noise = outlier_intensity * range_f * (2 * rand(num_outliers, 1) - 1);
-        else
-            error('Tipo di rumore non supportato');
-        end
-        f13_noisy(outlier_idx) = f13_noisy(outlier_idx) + noise;
-        
-        data_noisy = [X13(:), Y13(:), f13(:), f13_noisy, is_outlier13];
-        
-        % Nome file con info rumore
-        noise_info = sprintf('_noise_%s_frac%.2f_int%.2f_seed%d', noise_type, outlier_fraction, outlier_intensity, seed);
-        filename_noisy13 = fullfile(output_dir, ['example13_dataset' noise_info '.txt']);
+        [augmented13, metadata13] = adaptivehb.data.apply_noise(X13(:), Y13(:), f13_vector, noise_settings);
+        f13_noisy = augmented13.fNoisy;
+        is_outlier13 = augmented13.isOutlier;
+        data_noisy = [augmented13.x, augmented13.y, augmented13.fTrue, augmented13.fNoisy, augmented13.isOutlier];
+
+        filename_noisy13 = fullfile(output_dir, ...
+            adaptivehb.data.format_noise_filename('example13_dataset', metadata13));
         save_dataset(filename_noisy13, data_noisy, true);  % Con mark
-        
+
         fprintf('Dataset rumoroso salvato in: %s\n', filename_noisy13);
-        fprintf('Numero di outliers: %d (%.2f%%)\n', num_outliers, outlier_fraction*100);
+        fprintf('Numero di outliers: %d (%.2f%%)\n', metadata13.numOutliers, metadata13.actualOutlierFraction * 100);
         fprintf('Range valori f_noisy: [%.6f, %.6f]\n', min(f13_noisy), max(f13_noisy));
     end
 end
