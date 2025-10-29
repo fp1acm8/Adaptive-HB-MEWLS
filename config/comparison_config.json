@@ -1,0 +1,35 @@
+{
+  "dataset": {
+    "path": "data/example13_dataset.txt",
+    "normalize": true
+  },
+  "noise": {
+    "type": "gaussian",
+    "standardDeviation": 0.05,
+    "outlierFraction": 0.05,
+    "outlierInflation": 0.2,
+    "seed": 42
+  },
+  "solvers": [
+    {
+      "name": "LeastSquares",
+      "function": "adaptivehb.solvers.leastSquaresSolver",
+      "parameters": {
+        "maxDegree": 3
+      }
+    },
+    {
+      "name": "MEWLS",
+      "function": "adaptivehb.solvers.mewlsSolver",
+      "parameters": {
+        "maxDegree": 3,
+        "entropyScale": 15.0
+      }
+    }
+  ],
+  "metrics": [
+    "rmse",
+    "maxAbsError",
+    "mae"
+  ]
+}
