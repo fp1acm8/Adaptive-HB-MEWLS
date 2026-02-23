@@ -1,10 +1,25 @@
 function [A, terms] = polynomialDesignMatrix(xy, maxDegree)
 %POLYNOMIALDESIGNMATRIX Build a 2D polynomial design matrix.
 %   [A, TERMS] = POLYNOMIALDESIGNMATRIX(XY, MAXDEGREE) returns the design
-%   matrix for all bivariate monomials with total degree up to MAXDEGREE.
-%   XY is an N-by-2 matrix with coordinates in [0, 1]^2. TERMS is a
-%   MAXTERMS-by-2 matrix storing the exponent pairs [px, py] used in the
-%   monomials.
+%   matrix A for all bivariate monomials x^px * y^py whose total degree
+%   px + py does not exceed MAXDEGREE.
+%
+%   Inputs:
+%       XY        - N-by-2 matrix of coordinates (typically in [0,1]^2).
+%       MAXDEGREE - non-negative integer setting the maximum total degree.
+%
+%   Outputs:
+%       A     - N-by-M design matrix where M = (maxDegree+1)*(maxDegree+2)/2.
+%               Each column corresponds to one monomial term.
+%       TERMS - M-by-2 matrix of exponent pairs [px, py].
+%
+%   The terms are enumerated in graded lexicographic order.  For example,
+%   with maxDegree = 2 the columns of A correspond to:
+%       1, x, y, x^2, xy, y^2
+%   i.e. TERMS = [0 0; 1 0; 0 1; 2 0; 1 1; 0 2].
+%
+%   See also adaptivehb.solvers.leastSquaresSolver,
+%            adaptivehb.solvers.mewlsSolver.
 
 arguments
     xy (:, 2) double

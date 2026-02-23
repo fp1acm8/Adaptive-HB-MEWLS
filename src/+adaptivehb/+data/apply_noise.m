@@ -15,6 +15,12 @@ function [augmented, metadata] = apply_noise(x, y, f, settings)
 %
 %   The helper adaptivehb.data.format_noise_filename can be used together
 %   with METADATA to create consistent filenames when persisting the data.
+%
+%   Note: for the struct-level interface used by run_comparison (driven by
+%   JSON configuration), see adaptivehb.io.apply_noise instead.
+%
+%   See also adaptivehb.data.format_noise_filename,
+%            adaptivehb.io.apply_noise.
 
     if nargin < 4 || isempty(settings)
         settings = struct();

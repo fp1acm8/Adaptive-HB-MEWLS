@@ -1,0 +1,16 @@
+# MATLAB autosave files
+*.asv
+
+# Generated report directories
+reports/
+
+# Temporary MAT files in root (data snapshots are inside reports/)
+/*.mat
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# MATLAB code generation and build artifacts
+codegen/
+slprj/
