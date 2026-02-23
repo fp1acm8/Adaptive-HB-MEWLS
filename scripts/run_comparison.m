@@ -13,9 +13,11 @@ function run_comparison(configPath)
 %       run_comparison();
 %       run_comparison('config/my_experiment.json');
 %
-%   The script assumes the repository root is the current working folder.
+%   The function assumes the repository root is the current working folder.
 %
-%   See README for detailed usage instructions and customisation tips.
+%   See also adaptivehb.io.load_dataset, adaptivehb.io.apply_noise,
+%            adaptivehb.solvers.leastSquaresSolver,
+%            adaptivehb.solvers.mewlsSolver.
 
 % Ensure the package folder is visible on the MATLAB path. We avoid
 % permanently modifying the environment by restoring the path on cleanup.
@@ -53,8 +55,19 @@ for i = 1:numel(solverSpecs)
     else
         solverParams = struct();
     end
-    solverResults(i) = solverFcn(dataset, solverParams);
-    solverResults(i).name = solverSpecs(i).name;
+
+    try
+        solverResults(i) = solverFcn(dataset, solverParams);
+        solverResults(i).name = solverSpecs(i).name;
+    catch ME
+        warning('adaptivehb:comparison:SolverFailed', ...
+            'Solver "%s" failed: %s', solverSpecs(i).name, ME.message);
+        solverResults(i).name = solverSpecs(i).name;
+        solverResults(i).prediction = NaN(size(dataset.fObserved));
+        solverResults(i).coefficients = [];
+        solverResults(i).metrics = struct('rmse', NaN, 'maxAbsError', NaN, 'mae', NaN);
+        solverResults(i).convergence = table();
+    end
 end
 
 % Aggregate metrics.
@@ -82,7 +95,7 @@ deltaTable = movevars(deltaTable, 'solver', 'Before', 1);
 summaryTable = [metricsTable, deltaTable(:, 2:end)];
 
 % Prepare report directory.
-timestamp = datestr(now, 'yyyymmdd_HHMMSS');
+timestamp = char(datetime('now', 'Format', 'yyyyMMdd_HHmmss'));
 reportDir = fullfile('reports', ['comparison_' timestamp]);
 if ~exist(reportDir, 'dir')
     mkdir(reportDir);

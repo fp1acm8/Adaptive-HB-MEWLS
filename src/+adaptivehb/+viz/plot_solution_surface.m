@@ -1,8 +1,22 @@
 function fig = plot_solution_surface(dataset, solverResults)
-%PLOT_SOLUTION_SURFACE Compare solver predictions against the reference.
-%   FIG = PLOT_SOLUTION_SURFACE(DATASET, SOLVERRESULTS) returns a figure
-%   handle with subplots showing the ground-truth field and the predicted
-%   surfaces produced by each solver.
+%PLOT_SOLUTION_SURFACE Compare solver predictions against ground truth.
+%   FIG = PLOT_SOLUTION_SURFACE(DATASET, SOLVERRESULTS) creates a figure
+%   with (nSolvers + 1) side-by-side 3-D scatter subplots: the first shows
+%   the ground-truth field (dataset.fTrue), and each subsequent subplot
+%   shows one solver's prediction.  All subplots share the same colour axis
+%   (clamped to the ground-truth range) and use the "turbo" colourmap with
+%   a 45/30-degree view angle.
+%
+%   Inputs:
+%       DATASET       - struct with xy (N-by-2) and fTrue (N-by-1).
+%       SOLVERRESULTS - 1-by-K struct array; each element must have fields
+%                       prediction (N-by-1) and name (string).
+%
+%   Output:
+%       FIG - figure handle (caller is responsible for saving/closing).
+%
+%   See also adaptivehb.viz.plot_error_distribution,
+%            adaptivehb.viz.plot_convergence_curve.
 
 arguments
     dataset (1, 1) struct

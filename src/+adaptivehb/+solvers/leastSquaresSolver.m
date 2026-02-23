@@ -1,18 +1,31 @@
 function result = leastSquaresSolver(dataset, params)
-%LEASTSQUARESSOLVER Polynomial surrogate for the reference LS workflow.
+%LEASTSQUARESSOLVER Polynomial surrogate using Ordinary Least Squares.
 %   RESULT = LEASTSQUARESSOLVER(DATASET, PARAMS) fits a polynomial surface
-%   to the observed samples using ordinary least squares. PARAMS.maxDegree
-%   controls the maximum polynomial degree evaluated during the sweep.
+%   to the observed samples using ordinary least squares (OLS).  The solver
+%   sweeps polynomial degrees from 1 to PARAMS.maxDegree and retains the
+%   full convergence history so that the user can inspect how the error
+%   evolves with increasing polynomial complexity.
 %
-%   The returned struct exposes:
-%       - name        : solver identifier
-%       - prediction  : fitted values at the input points
-%       - metrics     : struct with rmse/maxAbsError/mae
-%       - convergence : table with per-degree error trends
+%   Inputs:
+%       DATASET  - struct produced by adaptivehb.io.load_dataset containing
+%                  at least xy (N-by-2), fObserved (N-by-1), and fTrue.
+%       PARAMS   - struct with optional fields:
+%                    maxDegree : maximum polynomial degree (default 3).
 %
-%   The simplified solver provides a deterministic baseline that can be
-%   compared against the entropy-weighted variant defined in
-%   adaptivehb.solvers.mewlsSolver.
+%   Output:
+%       RESULT - struct with the following fields:
+%           name         - solver identifier string ("LeastSquares")
+%           prediction   - N-by-1 fitted values at input points (degree = maxDegree)
+%           coefficients - polynomial coefficient vector for the final degree
+%           metrics      - struct with rmse, maxAbsError, mae for the final degree
+%           convergence  - table with columns degree, rmse, maxAbsError, mae
+%
+%   This solver provides a deterministic baseline for comparison against
+%   the entropy-weighted MEWLS variant (adaptivehb.solvers.mewlsSolver).
+%
+%   See also adaptivehb.solvers.mewlsSolver,
+%            adaptivehb.solvers.polynomialDesignMatrix,
+%            adaptivehb.solvers.compute_metrics.
 
 arguments
     dataset (1, 1) struct
@@ -23,8 +36,7 @@ if ~isfield(params, 'maxDegree') || isempty(params.maxDegree)
     params.maxDegree = 3;
 end
 
-maxDegree = params.maxDegree;
-maxDegree = max(1, maxDegree);
+maxDegree = max(1, params.maxDegree);
 
 metricsHistory = zeros(maxDegree, 3);
 degreeList = 1:maxDegree;
@@ -33,7 +45,7 @@ for d = degreeList
     [A, ~] = adaptivehb.solvers.polynomialDesignMatrix(dataset.xy, d);
     coeffs = A \ dataset.fObserved;
     prediction = A * coeffs;
-    metricsHistory(d, :) = compute_metrics(dataset.fTrue, prediction);
+    metricsHistory(d, :) = adaptivehb.solvers.compute_metrics(dataset.fTrue, prediction);
     coeffHistory{d} = coeffs; %#ok<AGROW>
     predictionHistory{d} = prediction; %#ok<AGROW>
 end
@@ -55,12 +67,4 @@ result = struct(...
     'metrics', metricsStruct, ...
     'convergence', convergence);
 
-end
-
-function metrics = compute_metrics(fTrue, prediction)
-residual = fTrue - prediction;
-rmse = sqrt(mean(residual .^ 2));
-maxAbs = max(abs(residual));
-mae = mean(abs(residual));
-metrics = [rmse, maxAbs, mae];
 end

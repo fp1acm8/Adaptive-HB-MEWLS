@@ -9,8 +9,15 @@ function dataset = apply_noise(dataset, noiseCfg)
 %                      noiseCfg.standardDeviation. A fraction of samples can
 %                      be inflated to simulate outliers.
 %
+%   This function operates on the dataset struct used by run_comparison and
+%   is driven by the JSON noise configuration.  For a lower-level interface
+%   that accepts raw (x, y, f) vectors and supports additional noise types
+%   (e.g. "spike"), see adaptivehb.data.apply_noise.
+%
 %   The configuration fields are optional and default to sensible values
 %   when omitted.
+%
+%   See also adaptivehb.io.load_dataset, adaptivehb.data.apply_noise.
 
 arguments
     dataset (1, 1) struct
