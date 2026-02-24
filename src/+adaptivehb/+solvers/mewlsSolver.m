@@ -109,6 +109,8 @@ W = diag(weights);
 % how the approximation improves with richer polynomial spaces Pi_d^2.
 metricsHistory = zeros(maxDegree, 3); % each row: [RMSE, maxAbsErr, MAE]
 degreeList = 1:maxDegree;             % degrees to evaluate
+coeffHistory = cell(1, maxDegree);        % polynomial coefficients per degree
+predictionHistory = cell(1, maxDegree);   % predicted values per degree
 
 for d = degreeList
     % Build the design matrix Phi_d in R^{N x M_d} for the bivariate
@@ -132,8 +134,8 @@ for d = degreeList
 
     % Store coefficient vector and prediction for this degree so we can
     % retrieve the final-degree results after the loop ends.
-    coeffHistory{d} = coeffs; %#ok<AGROW>
-    predictionHistory{d} = prediction; %#ok<AGROW>
+    coeffHistory{d} = coeffs;
+    predictionHistory{d} = prediction;
 end
 
 % --- Assemble output struct -------------------------------------------

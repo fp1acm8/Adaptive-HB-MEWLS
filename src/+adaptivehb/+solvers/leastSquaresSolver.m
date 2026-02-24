@@ -55,6 +55,8 @@ maxDegree = max(1, params.maxDegree);
 % error metrics at each step to produce a convergence curve.
 metricsHistory = zeros(maxDegree, 3); % each row: [RMSE, maxAbsErr, MAE]
 degreeList = 1:maxDegree;             % degrees to evaluate
+coeffHistory = cell(1, maxDegree);        % polynomial coefficients per degree
+predictionHistory = cell(1, maxDegree);   % predicted values per degree
 
 for d = degreeList
     % Build the design matrix Phi_d in R^{N x M_d} for the bivariate
@@ -76,8 +78,8 @@ for d = degreeList
     metricsHistory(d, :) = adaptivehb.solvers.compute_metrics(dataset.fTrue, prediction);
 
     % Store coefficient vector and prediction for this degree.
-    coeffHistory{d} = coeffs; %#ok<AGROW>
-    predictionHistory{d} = prediction; %#ok<AGROW>
+    coeffHistory{d} = coeffs;
+    predictionHistory{d} = prediction;
 end
 
 % --- Assemble output struct -------------------------------------------
