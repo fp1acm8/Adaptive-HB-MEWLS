@@ -105,6 +105,17 @@ f          = dataset.f;          % N-by-1 observed values
 f_true     = dataset.f_true;     % N-by-1 true values
 is_outlier = dataset.is_outlier; % N-by-1 logical outlier mask
 
+% --- Degenerate input guard -------------------------------------------
+% If every sample is an outlier the weight vector collapses and the
+% normal equations become meaningless.  Warn the caller rather than
+% silently returning garbage.
+if all(is_outlier)
+    warning('adaptivehb:mewls:allOutliers', ...
+        ['All %d data points are flagged as outliers. ' ...
+         'MEWLS results may be unreliable. ' ...
+         'Consider revising the outlier detection threshold.'], numel(is_outlier));
+end
+
 % --- Entropy weight computation (Brugnano et al. 2024, Sec. 3) -------
 % Build the MEWLS weight vector (N-by-1):
 %   w_i = exp(-lambda * ||x_i - centroid||^2)
@@ -135,8 +146,21 @@ for d = degreeList
     %   QI_coeff = (Phi' W Phi) \ (Phi' W f)
     % This minimises the weighted residual:
     %   sum_i w_i * (f_i - p(x_i,y_i))^2
-    % Analogo a: S = col_matrix*diag(weight)*col_matrix'; QI_coeff = S\rhs
-    QI_coeff = (A' * W * A) \ (A' * W * f);
+    % Equivalent to: S = col_matrix*diag(weight)*col_matrix'; QI_coeff = S\rhs
+    AtWA = A' * W * A;
+
+    % Check the condition number before solving to detect ill-conditioned
+    % normal equations.  High lambda or near-degenerate data can cause
+    % A'WA to become singular.  condest is O(n^2) — cheaper than cond().
+    condNum = condest(AtWA);
+    if condNum > 1e10
+        warning('adaptivehb:mewls:illConditioned', ...
+            ['Normal equations are ill-conditioned (cond ~ %.2e) at degree %d. ' ...
+             'Consider reducing lambda (currently %.1f) or normalizing coordinates.'], ...
+            condNum, d, lambda);
+    end
+
+    QI_coeff = AtWA \ (A' * W * f);
 
     % Evaluate the fitted polynomial at all data points: QI = Phi * QI_coeff.
     QI = A * QI_coeff;
@@ -172,7 +196,7 @@ result = struct(...
     'QI_coeff', QI_coeff_history{end}, ...  % M-by-1 polynomial coefficients
     'metrics', metricsStruct, ...           % struct with rmse/maxAbsError/mae
     'convergence', convergence, ...         % table: degree x metrics
-    'weight', weight);                      % N-by-1 MEWLS weights (per diagnostica)
+    'weight', weight);                      % N-by-1 MEWLS weights (for diagnostics)
 
 end
 
