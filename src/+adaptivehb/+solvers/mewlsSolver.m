@@ -146,7 +146,7 @@ for d = degreeList
     %   QI_coeff = (Phi' W Phi) \ (Phi' W f)
     % This minimises the weighted residual:
     %   sum_i w_i * (f_i - p(x_i,y_i))^2
-    % Analogo a: S = col_matrix*diag(weight)*col_matrix'; QI_coeff = S\rhs
+    % Equivalent to: S = col_matrix*diag(weight)*col_matrix'; QI_coeff = S\rhs
     AtWA = A' * W * A;
 
     % Check the condition number before solving to detect ill-conditioned
@@ -196,7 +196,7 @@ result = struct(...
     'QI_coeff', QI_coeff_history{end}, ...  % M-by-1 polynomial coefficients
     'metrics', metricsStruct, ...           % struct with rmse/maxAbsError/mae
     'convergence', convergence, ...         % table: degree x metrics
-    'weight', weight);                      % N-by-1 MEWLS weights (per diagnostica)
+    'weight', weight);                      % N-by-1 MEWLS weights (for diagnostics)
 
 end
 
