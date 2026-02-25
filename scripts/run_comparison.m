@@ -15,6 +15,14 @@ function run_comparison(configPath)
 %
 %   The function assumes the repository root is the current working folder.
 %
+%   Nota: l'implementazione a B-spline gerarchiche adattive (HBS) che estende
+%   questo confronto polinomiale richiede la libreria GeoPDEs per MATLAB.
+%   Disponibile su: https://rafavzqz.github.io/geopdes/
+%   Le funzioni GeoPDEs utilizzate nel codice HBS sono:
+%     adaptivity_initialize_laplace, adaptivity_refine,
+%     hspace_subdivision_matrix, op_gradgradu_gradgradv_hier,
+%     sp_eval, hmsh_plot_cells, sp_get_cells.
+%
 %   See also adaptivehb.io.load_dataset, adaptivehb.io.apply_noise,
 %            adaptivehb.solvers.leastSquaresSolver,
 %            adaptivehb.solvers.mewlsSolver.
@@ -68,6 +76,7 @@ config = jsondecode(configText);
 % Load the point-cloud dataset from disk. The loader auto-detects whether
 % the file has 3 columns (clean) or 5 columns (noisy with outlier flags).
 % Coordinates are normalised to [0,1]^2 unless config.dataset.normalize=false.
+% I dati sono nella forma (u,v,f(u,v)) come nel codice HBS originale.
 dataset = adaptivehb.io.load_dataset(config.dataset.path, config.dataset);
 
 % Inject synthetic noise/outliers according to the noise config section.
@@ -90,7 +99,8 @@ for i = 1:numel(solverSpecs)
     % into a callable function handle.
     solverFcn = str2func(solverSpecs(i).function);
 
-    % Extract solver-specific parameters if provided; otherwise empty struct.
+    % Extract solver-specific parameters (method_data) if provided;
+    % otherwise empty struct (defaults will be used inside the solver).
     if isfield(solverSpecs(i), 'parameters')
         solverParams = solverSpecs(i).parameters;
     else
@@ -111,8 +121,8 @@ for i = 1:numel(solverSpecs)
         % Populate a placeholder result with NaN metrics so downstream
         % aggregation and plotting still work without crashing.
         solverResults(i).name = solverSpecs(i).name;
-        solverResults(i).prediction = NaN(size(dataset.fObserved));
-        solverResults(i).coefficients = [];
+        solverResults(i).QI = NaN(size(dataset.f));
+        solverResults(i).QI_coeff = [];
         solverResults(i).metrics = struct('rmse', NaN, 'maxAbsError', NaN, 'mae', NaN);
         solverResults(i).convergence = table();
     end
@@ -195,12 +205,12 @@ fclose(fid);
 %  SECTION 9: Generate and save diagnostic plots
 % =====================================================================
 
-% 3-D scatter plot comparing ground truth vs each solver's prediction.
+% 3-D scatter plot comparing ground truth vs each solver's QI approximation.
 figSurface = adaptivehb.viz.plot_solution_surface(dataset, solverResults);
 saveas(figSurface, fullfile(reportDir, 'solution_surfaces.png'));
 close(figSurface);
 
-% Residual histograms (PDF-normalised) for each solver.
+% Error histograms (PDF-normalised) for each solver.
 figError = adaptivehb.viz.plot_error_distribution(dataset, solverResults);
 saveas(figError, fullfile(reportDir, 'error_distributions.png'));
 close(figError);

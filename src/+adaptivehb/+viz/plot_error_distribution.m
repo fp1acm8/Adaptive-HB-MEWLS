@@ -1,12 +1,12 @@
 function fig = plot_error_distribution(dataset, solverResults)
-%PLOT_ERROR_DISTRIBUTION Visualise residual histograms for each solver.
+%PLOT_ERROR_DISTRIBUTION Visualise error histograms for each solver.
 %   FIG = PLOT_ERROR_DISTRIBUTION(DATASET, SOLVERRESULTS) creates one
-%   subplot per solver showing the histogram of residuals (fTrue - pred),
+%   subplot per solver showing the histogram of errors (f_true - QI),
 %   normalised as a probability density function (PDF).
 %
 %   Inputs:
-%       DATASET       - struct with fTrue (N-by-1).
-%       SOLVERRESULTS - 1-by-K struct array with fields prediction and name.
+%       DATASET       - struct with f_true (N-by-1).
+%       SOLVERRESULTS - 1-by-K struct array with fields QI and name.
 %
 %   Output:
 %       FIG - figure handle.
@@ -30,17 +30,17 @@ for i = 1:nSolvers
     % Place this solver's histogram in the i-th subplot (single row).
     subplot(1, nSolvers, i);
 
-    % Compute the point-wise residual: e = fTrue - prediction.
+    % Compute the point-wise error: e = f_true - QI.
     % Positive = under-prediction, negative = over-prediction.
-    residual = dataset.fTrue - solverResults(i).prediction;
+    error = dataset.f_true - solverResults(i).QI;
 
     % Draw a histogram normalised as a probability density function (PDF).
     % 'pdf' normalisation ensures the area under the histogram equals 1,
     % making histograms comparable across solvers with different bin counts.
-    histogram(residual, 'Normalization', 'pdf');
+    histogram(error, 'Normalization', 'pdf');
 
-    title(sprintf('%s residuals', solverResults(i).name));
-    xlabel('Error');    % residual value on the x-axis
+    title(sprintf('%s errors', solverResults(i).name));
+    xlabel('Error');    % error value on the x-axis
     ylabel('PDF');      % probability density on the y-axis
     grid on;            % add grid lines for easier reading
 end

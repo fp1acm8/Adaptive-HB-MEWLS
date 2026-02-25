@@ -57,16 +57,16 @@ switch lower(noiseCfg.type)
         % Generate zero-mean Gaussian noise with standard deviation sigma.
         % Clamp sigma to eps to avoid a degenerate (zero-variance) case.
         sigma = max(noiseCfg.standardDeviation, eps);
-        perturb = sigma * randn(size(dataset.fObserved));
+        perturb = sigma * randn(size(dataset.f));
 
         % Add the noise to the observed values.
-        fObserved = dataset.fObserved + perturb;
+        f = dataset.f + perturb;
 
         % --- Outlier simulation ---
         % Select a random subset of k points and inflate their observed
         % values by a multiplicative factor (1 + |outlierInflation|).
         % This simulates gross errors / outlier measurements.
-        n = numel(fObserved);
+        n = numel(f);
         k = round(noiseCfg.outlierFraction * n);  % number of outliers
 
         if k > 0
@@ -75,16 +75,16 @@ switch lower(noiseCfg.type)
 
             % Inflation factor: e.g. outlierInflation=0.2 -> multiply by 1.2.
             inflation = 1 + abs(noiseCfg.outlierInflation);
-            fObserved(idx) = fObserved(idx) * inflation;
+            f(idx) = f(idx) * inflation;
 
             % Update the outlier mask: reset all to false, then flag the
             % selected indices as outliers.
-            dataset.isOutlier(:) = false;
-            dataset.isOutlier(idx) = true;
+            dataset.is_outlier(:) = false;
+            dataset.is_outlier(idx) = true;
         end
 
         % Store the perturbed observations back into the dataset struct.
-        dataset.fObserved = fObserved;
+        dataset.f = f;
 
     otherwise
         % Any unrecognised noise type triggers an informative error.

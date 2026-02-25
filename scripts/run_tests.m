@@ -48,7 +48,7 @@ results{end+1} = run_one('load_dataset (3-col)', ...
 % =====================================================================
 %  Test 3: load_dataset — 5-column (noisy) file
 %  Loads a pre-generated noisy dataset and verifies that outlier flags
-%  and the distinction between fTrue/fObserved are preserved.
+%  and the distinction between f_true/f are preserved.
 % =====================================================================
 fiveColFile = fullfile(repoRoot, 'data', ...
     'outl_black_forest_noise_gauss_frac0.05_int0.10_seed42.txt');
@@ -57,7 +57,7 @@ results{end+1} = run_one('load_dataset (5-col)', ...
 
 % =====================================================================
 %  Test 4: io.apply_noise
-%  Applies Gaussian noise to a clean dataset and checks that fObserved
+%  Applies Gaussian noise to a clean dataset and checks that f
 %  was actually modified and outliers were flagged.
 % =====================================================================
 results{end+1} = run_one('io.apply_noise', ...
@@ -178,20 +178,20 @@ ds = adaptivehb.io.load_dataset(filePath, struct('normalize', true));
 assert(isstruct(ds), 'Expected struct output.');
 
 % All five required fields must be present.
-requiredFields = {'originalXY','xy','fTrue','fObserved','isOutlier'};
+requiredFields = {'originalXY','data','f_true','f','is_outlier'};
 for k = 1:numel(requiredFields)
     assert(isfield(ds, requiredFields{k}), ...
         sprintf('Missing field: %s', requiredFields{k}));
 end
 
-% xy must have exactly 2 columns (x, y).
-assert(size(ds.xy, 2) == 2, 'xy must have 2 columns.');
+% data must have exactly 2 columns (x, y).
+assert(size(ds.data, 2) == 2, 'data must have 2 columns.');
 
 % Number of samples must be consistent across fields.
-assert(numel(ds.fTrue) == size(ds.xy, 1), 'Dimension mismatch.');
+assert(numel(ds.f_true) == size(ds.data, 1), 'Dimension mismatch.');
 
 % After normalisation, all coordinates must lie in [0,1].
-assert(all(ds.xy(:) >= -eps & ds.xy(:) <= 1+eps), ...
+assert(all(ds.data(:) >= -eps & ds.data(:) <= 1+eps), ...
     'Normalised coordinates outside [0,1].');
 end
 
@@ -200,11 +200,11 @@ function test_load_dataset_5col(filePath)
 ds = adaptivehb.io.load_dataset(filePath);
 
 % At least some points should be flagged as outliers.
-assert(any(ds.isOutlier), 'Expected some outliers in 5-column dataset.');
+assert(any(ds.is_outlier), 'Expected some outliers in 5-column dataset.');
 
-% fTrue and fObserved must differ (the noise separates them).
-assert(~isequal(ds.fTrue, ds.fObserved), ...
-    'fTrue and fObserved should differ in noisy dataset.');
+% f_true and f must differ (the noise separates them).
+assert(~isequal(ds.f_true, ds.f), ...
+    'f_true and f should differ in noisy dataset.');
 end
 
 function test_io_apply_noise(filePath)
@@ -215,12 +215,12 @@ noiseCfg = struct('type', 'gaussian', 'standardDeviation', 0.1, ...
     'outlierFraction', 0.1, 'outlierInflation', 0.5, 'seed', 99);
 dsNoisy = adaptivehb.io.apply_noise(ds, noiseCfg);
 
-% fObserved must have changed after noise injection.
-assert(~isequal(ds.fObserved, dsNoisy.fObserved), ...
-    'Noise should change fObserved.');
+% f must have changed after noise injection.
+assert(~isequal(ds.f, dsNoisy.f), ...
+    'Noise should change f.');
 
 % Some points must be flagged as outliers.
-assert(any(dsNoisy.isOutlier), 'Expected some outliers after noise.');
+assert(any(dsNoisy.is_outlier), 'Expected some outliers after noise.');
 end
 
 function test_data_apply_noise()
@@ -236,7 +236,7 @@ settings = struct('addNoise', true, 'outlierFraction', 0.1, ...
 
 assert(meta.noiseApplied, 'noiseApplied should be true.');
 assert(meta.numOutliers > 0, 'Expected some outliers.');
-assert(~isequal(aug.fTrue, aug.fNoisy), 'fNoisy should differ from fTrue.');
+assert(~isequal(aug.f_true, aug.f_noisy), 'f_noisy should differ from f_true.');
 assert(numel(aug.x) == 100, 'Output size mismatch.');
 end
 
@@ -255,8 +255,8 @@ end
 
 function test_design_matrix()
 % Verify design matrix dimensions for degree 2.
-xy = rand(50, 2);
-[A, terms] = adaptivehb.solvers.polynomialDesignMatrix(xy, 2);
+data = rand(50, 2);
+[A, terms] = adaptivehb.solvers.polynomialDesignMatrix(data, 2);
 
 % For degree 2: M = (2+1)(2+2)/2 = 6 columns.
 assert(size(A, 1) == 50, 'Row count must match input points.');
@@ -269,61 +269,61 @@ end
 
 function test_compute_metrics()
 % Validate the three metrics against hand-computed expected values.
-fTrue = [1; 2; 3; 4; 5];
-pred  = [1.1; 2.0; 2.8; 4.2; 4.9];
-m = adaptivehb.solvers.compute_metrics(fTrue, pred);
+f_true = [1; 2; 3; 4; 5];
+QI     = [1.1; 2.0; 2.8; 4.2; 4.9];
+m = adaptivehb.solvers.compute_metrics(f_true, QI);
 
 assert(numel(m) == 3, 'compute_metrics must return 3 values.');
 
-residual = fTrue - pred;
-% RMSE = sqrt(mean(residual.^2))
-expectedRMSE = sqrt(mean(residual.^2));
+error_vec = f_true - QI;
+% RMSE = sqrt(mean(error.^2))
+expectedRMSE = sqrt(mean(error_vec.^2));
 assert(abs(m(1) - expectedRMSE) < 1e-12, 'RMSE mismatch.');
-% maxAbsError = max(|residual|)
-assert(abs(m(2) - max(abs(residual))) < 1e-12, 'maxAbsError mismatch.');
-% MAE = mean(|residual|)
-assert(abs(m(3) - mean(abs(residual))) < 1e-12, 'MAE mismatch.');
+% maxAbsError = max(|error|)
+assert(abs(m(2) - max(abs(error_vec))) < 1e-12, 'maxAbsError mismatch.');
+% MAE = mean(|error|)
+assert(abs(m(3) - mean(abs(error_vec))) < 1e-12, 'MAE mismatch.');
 end
 
 function test_solver(solverFcn, expectedName)
 % Run a solver on synthetic data and verify the output struct fields.
 rng(0);
 N = 200;
-xy = rand(N, 2);
-fTrue = sin(pi*xy(:,1)) .* cos(pi*xy(:,2));
+data = rand(N, 2);
+f_true = sin(pi*data(:,1)) .* cos(pi*data(:,2));
 
-% Build a dataset struct with no noise (fObserved = fTrue).
-ds = struct('xy', xy, 'fTrue', fTrue, 'fObserved', fTrue, ...
-    'isOutlier', false(N,1));
-params = struct('maxDegree', 2);
-result = solverFcn(ds, params);
+% Build a dataset struct with no noise (f = f_true).
+ds = struct('data', data, 'f_true', f_true, 'f', f_true, ...
+    'is_outlier', false(N,1));
+method_data = struct('degree', 2);
+result = solverFcn(ds, method_data);
 
 % Verify required output fields.
-assert(isfield(result, 'prediction'), 'Missing field: prediction.');
+assert(isfield(result, 'QI'), 'Missing field: QI.');
 assert(isfield(result, 'metrics'), 'Missing field: metrics.');
 assert(isfield(result, 'convergence'), 'Missing field: convergence.');
 
-% Prediction must have N elements.
-assert(numel(result.prediction) == N, 'prediction length mismatch.');
+% QI must have N elements.
+assert(numel(result.QI) == N, 'QI length mismatch.');
 
 % RMSE must be non-negative.
 assert(result.metrics.rmse >= 0, 'RMSE must be non-negative.');
 
 % Convergence table must have 2 rows (one per degree: 1 and 2).
-assert(height(result.convergence) == 2, 'convergence should have 2 rows for maxDegree=2.');
+assert(height(result.convergence) == 2, 'convergence should have 2 rows for degree=2.');
 end
 
 function test_visualizations()
 % Create and immediately close each plot type to verify no runtime errors.
 rng(0);
 N = 50;
-xy = rand(N, 2);
-fTrue = xy(:,1) + xy(:,2);
+data = rand(N, 2);
+f_true = data(:,1) + data(:,2);
 
 % Build a minimal dataset and solver result for plotting.
-ds = struct('xy', xy, 'fTrue', fTrue, 'fObserved', fTrue, ...
-    'isOutlier', false(N,1));
-sr = struct('name', "TestSolver", 'prediction', fTrue + 0.01*randn(N,1), ...
+ds = struct('data', data, 'f_true', f_true, 'f', f_true, ...
+    'is_outlier', false(N,1));
+sr = struct('name', "TestSolver", 'QI', f_true + 0.01*randn(N,1), ...
     'convergence', table((1:2)', rand(2,1), rand(2,1), rand(2,1), ...
     'VariableNames', {'degree','rmse','maxAbsError','mae'}));
 

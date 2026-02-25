@@ -2,19 +2,23 @@ function dataset = load_dataset(filePath, options)
 %LOAD_DATASET Load a point cloud dataset from disk.
 %   DATASET = LOAD_DATASET(FILEPATH, OPTIONS) reads either a clean dataset
 %   (three columns: x, y, value) or a dataset with noise/outliers (five
-%   columns: x, y, trueValue, observedValue, isOutlier). The returned
-%   struct contains the raw points, the normalized coordinates, and helper
-%   vectors used by the comparison harness.
+%   columns: x, y, f_true, f, is_outlier). The returned struct contains the
+%   raw points, the normalized coordinates, and helper vectors used by the
+%   comparison harness.
 %
 %   OPTIONS.normalize (logical) controls whether coordinates are mapped to
 %   the unit square. When false, the original coordinates are preserved.
 %
 %   The dataset struct exposes the fields:
-%       - originalXY : coordinates as found on disk
-%       - xy         : coordinates (normalized if requested)
-%       - fTrue      : true signal when available, otherwise observed
-%       - fObserved  : noisy observations used as solver input
-%       - isOutlier  : logical mask for outliers (false when unavailable)
+%       - originalXY  : coordinates as found on disk
+%       - data        : coordinates (normalized if requested), N-by-2
+%       - f_true      : true signal when available, otherwise observed
+%       - f           : noisy observations used as solver input, N-by-1
+%       - is_outlier  : logical mask for outliers (false when unavailable)
+%
+%   The coordinate layout is compatible with the [0,1]x[0,1] domain used
+%   by the GeoPDEs library (geo_square.txt) in the hierarchical B-spline
+%   component. See: https://rafavzqz.github.io/geopdes/
 %
 %   This helper is intentionally self-contained to keep the orchestrator
 %   independent from the original demo scripts.
@@ -55,7 +59,7 @@ end
 % --- Validate the number of columns ----------------------------------
 % Only two formats are supported:
 %   3 columns: x, y, f              (clean dataset)
-%   5 columns: x, y, fTrue, fObs, isOutlier (noisy dataset)
+%   5 columns: x, y, f_true, f, is_outlier (noisy dataset)
 nCols = size(raw, 2);
 if ~ismember(nCols, [3, 5])
     error('adaptivehb:io:UnsupportedFormat', ...
@@ -71,36 +75,36 @@ switch nCols
     case 3
         % Clean dataset: column 3 is the only value; use it as both
         % the true signal and the observed signal (no noise present).
-        fTrue = raw(:, 3);
-        fObserved = fTrue;
+        f_true = raw(:, 3);
+        f = f_true;
         % No outliers in a clean dataset.
-        isOutlier = false(size(fTrue));
+        is_outlier = false(size(f_true));
 
     case 5
         % Noisy dataset:
         %   col 3 = true (uncorrupted) values
         %   col 4 = observed (noisy) values used for fitting
         %   col 5 = outlier flag (0 or 1)
-        fTrue = raw(:, 3);
-        fObserved = raw(:, 4);
-        isOutlier = logical(raw(:, 5));  % convert 0/1 to logical
+        f_true = raw(:, 3);
+        f = raw(:, 4);
+        is_outlier = logical(raw(:, 5));  % convert 0/1 to logical
 end
 
 % --- Optional coordinate normalisation --------------------------------
 % Map coordinates to [0,1]^2 using min-max scaling per axis.
 % This is critical for polynomial fitting: without normalisation, terms
 % like x^3 can vary over many orders of magnitude.
-xy = originalXY;
+data = originalXY;
 if options.normalize
-    xy = normalize_coordinates(originalXY);
+    data = normalize_coordinates(originalXY);
 end
 
 % --- Handle legacy datasets without a true-value column ---------------
 % Some older datasets may have NaN or empty values in the true column.
 % In that case, fall back to observed values so that downstream metric
-% computations (fTrue - prediction) remain well-defined.
-if isempty(fTrue) || all(isnan(fTrue))
-    fTrue = fObserved;
+% computations (f_true - QI) remain well-defined.
+if isempty(f_true) || all(isnan(f_true))
+    f_true = f;
 end
 
 % --- Pack everything into a single output struct ----------------------
@@ -108,10 +112,10 @@ end
 dataset = struct(...
     'filePath', filePath, ...       % path to the source file (for traceability)
     'originalXY', originalXY, ...   % raw coordinates as read from disk
-    'xy', xy, ...                   % normalised coordinates (or raw if normalize=false)
-    'fTrue', fTrue(:), ...          % true signal (N-by-1)
-    'fObserved', fObserved(:), ...  % observed signal, possibly noisy (N-by-1)
-    'isOutlier', isOutlier(:));     % logical outlier mask (N-by-1)
+    'data', data, ...               % normalised coordinates (or raw if normalize=false), N-by-2
+    'f_true', f_true(:), ...        % true signal (N-by-1)
+    'f', f(:), ...                  % observed signal, possibly noisy (N-by-1)
+    'is_outlier', is_outlier(:));   % logical outlier mask (N-by-1)
 
 end
 
@@ -120,16 +124,16 @@ end
 %  Local function: normalize_coordinates
 %  Maps each coordinate axis independently to [0, 1].
 % =====================================================================
-function xyNorm = normalize_coordinates(xy)
+function dataNorm = normalize_coordinates(data)
 % Compute per-axis minimum and maximum.
-minVals = min(xy, [], 1);   % 1-by-2: [min_x, min_y]
-maxVals = max(xy, [], 1);   % 1-by-2: [max_x, max_y]
+minVals = min(data, [], 1);   % 1-by-2: [min_x, min_y]
+maxVals = max(data, [], 1);   % 1-by-2: [max_x, max_y]
 
 % Range of each axis. Guard against zero range (constant coordinate)
 % by replacing zeros with 1, which maps constant axes to 0.
 rangeVals = maxVals - minVals;
 rangeVals(rangeVals == 0) = 1;
 
-% Apply min-max scaling: xy_norm = (xy - min) / range.
-xyNorm = (xy - minVals) ./ rangeVals;
+% Apply min-max scaling: data_norm = (data - min) / range.
+dataNorm = (data - minVals) ./ rangeVals;
 end
