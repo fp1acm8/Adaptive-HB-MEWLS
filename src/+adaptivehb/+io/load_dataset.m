@@ -87,7 +87,20 @@ switch nCols
         %   col 5 = outlier flag (0 or 1)
         f_true = raw(:, 3);
         f = raw(:, 4);
-        is_outlier = logical(raw(:, 5));  % convert 0/1 to logical
+
+        % Validate that column 5 contains only binary 0/1 values before
+        % converting to logical.  A non-binary value most likely means
+        % the columns are in the wrong order or the file format is wrong.
+        outlierCol = raw(:, 5);
+        if ~all(ismember(outlierCol, [0, 1]))
+            error('adaptivehb:io:load_dataset:invalidOutlierColumn', ...
+                ['Column 5 of "%s" must contain only binary outlier flags ' ...
+                 '(0 = inlier, 1 = outlier). ' ...
+                 'Found non-binary values; check the column order ' ...
+                 '[x, y, f_true, f, is_outlier].'], filePath);
+        end
+
+        is_outlier = logical(outlierCol);  % convert 0/1 to logical
 end
 
 % --- Optional coordinate normalisation --------------------------------

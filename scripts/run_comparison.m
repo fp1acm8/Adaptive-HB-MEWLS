@@ -28,6 +28,18 @@ function run_comparison(configPath)
 %            adaptivehb.solvers.mewlsSolver.
 
 % =====================================================================
+%  SECTION 0: MATLAB version check
+% =====================================================================
+
+% Require R2020b (v9.9) or later: this script uses `arguments` blocks,
+% `readmatrix`, and `jsondecode`, none of which exist in earlier releases.
+if verLessThan('matlab', '9.9')
+    error('adaptivehb:comparison:unsupportedMatlabVersion', ...
+        ['Adaptive-HB-MEWLS requires MATLAB R2020b (9.9) or later. ' ...
+         'Your version is %s.'], version);
+end
+
+% =====================================================================
 %  SECTION 1: Bootstrap — add src/ to the MATLAB path
 % =====================================================================
 

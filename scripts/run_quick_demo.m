@@ -14,6 +14,17 @@ function run_quick_demo()
 %   See also run_comparison, run_tests.
 
 % =====================================================================
+%  MATLAB version check
+% =====================================================================
+
+% Require R2020b (v9.9) or later: uses `arguments`, `readmatrix`, `jsondecode`.
+if verLessThan('matlab', '9.9')
+    error('adaptivehb:demo:unsupportedMatlabVersion', ...
+        ['Adaptive-HB-MEWLS requires MATLAB R2020b (9.9) or later. ' ...
+         'Your version is %s.'], version);
+end
+
+% =====================================================================
 %  Bootstrap: add src/ to the MATLAB path so +adaptivehb is resolvable
 % =====================================================================
 
