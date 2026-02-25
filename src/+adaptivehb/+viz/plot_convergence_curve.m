@@ -29,7 +29,7 @@ hold on;
 
 for i = 1:numel(solverResults)
     % Extract the convergence table for this solver.
-    % Table columns: degree (1..maxDegree), rmse, maxAbsError, mae.
+    % Table columns: degree (1..method_data.degree), rmse, maxAbsError, mae.
     conv = solverResults(i).convergence;
 
     % Plot RMSE vs polynomial degree as a line with circle markers.

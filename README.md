@@ -2,15 +2,32 @@
 
 MATLAB framework for comparing polynomial surface-fitting solvers — in particular Ordinary Least Squares (OLS) versus Maximum Entropy Weighted Least Squares (MEWLS) — on 2-D point-cloud datasets with optional synthetic noise and outlier injection.
 
-The project explores entropy-based weighting strategies for local approximation and adaptive mesh refinement, aiming to improve numerical stability and accuracy in spline-based geometric modelling and numerical analysis.
+The project explores entropy-based weighting strategies for local approximation and adaptive mesh refinement, aiming to improve numerical stability and accuracy in spline-based geometric modelling and numerical analysis. Il componente polinomiale qui implementato è progettato per essere integrato con il codice a B-spline gerarchiche adattive (HBS) basato su GeoPDEs.
 
 ## Requirements
 
 | Requirement | Details |
 |-------------|---------|
 | **MATLAB**  | R2020b or later (required for `arguments` blocks and `readmatrix`) |
-| **Toolboxes** | None — the framework uses only base MATLAB functions |
+| **Toolboxes** | None — the polynomial solver framework uses only base MATLAB functions |
 | **OS** | Any platform supported by MATLAB (Windows, macOS, Linux) |
+| **GeoPDEs** | Richiesta per il componente B-spline gerarchico (HBS). Non necessaria per il solver polinomiale standalone. Sito ufficiale: https://rafavzqz.github.io/geopdes/ |
+
+## Dipendenza GeoPDEs (componente HBS)
+
+L'estensione completa del framework a B-spline gerarchiche adattive (il codice HBS, con raffinamento adattivo della mesh) richiede la libreria **GeoPDEs** installata nel MATLAB path. Le funzioni GeoPDEs utilizzate nel codice HBS sono:
+
+- `adaptivity_initialize_laplace` — inizializza `hmsh`/`hspace` su dominio quadrato (`geo_square.txt`)
+- `adaptivity_refine` — raffina la mesh gerarchica e lo spazio B-spline
+- `hspace_subdivision_matrix` — matrice di suddivisione per cambio di livello gerarchico
+- `op_gradgradu_gradgradv_hier` — assembla la matrice di penalizzazione (bilaplaciano)
+- `sp_eval` — valuta la spline su griglia regolare
+- `hmsh_plot_cells` — plot della mesh gerarchica
+- `sp_get_cells` — restituisce gli elementi nel supporto di una funzione B-spline
+
+I file del codice HBS corrispondenti sono: `getcoeff_weighted_least_squares_pen.m`, `sp_eval_alt.m`, `basisfun_multi.m`, `support_containing_point.m`.
+
+GeoPDEs è disponibile su: **https://rafavzqz.github.io/geopdes/**
 
 ## Quick start
 
@@ -61,7 +78,7 @@ Adaptive-HB-MEWLS/
 │   │   └── format_noise_filename.m% Filename builder encoding noise params
 │   └── +viz/
 │       ├── plot_solution_surface.m % 3-D scatter comparison
-│       ├── plot_error_distribution.m% Residual histograms
+│       ├── plot_error_distribution.m% Error histograms
 │       └── plot_convergence_curve.m % RMSE vs polynomial degree
 ├── reports/                        % Auto-generated (one subfolder per run)
 ├── .gitignore
@@ -80,9 +97,9 @@ The comparison pipeline follows four steps:
  └──────────────┘     └──────────────┘     └──────────────┘     └──────────────┘
 ```
 
-1. **Load** — `adaptivehb.io.load_dataset` reads a text file (3 or 5 columns) and optionally normalises coordinates to [0,1]².
+1. **Load** — `adaptivehb.io.load_dataset` reads a text file (3 or 5 columns) and optionally normalises coordinates to [0,1]². I dati sono nella forma `(u,v,f(u,v))`.
 2. **Noise** — `adaptivehb.io.apply_noise` injects Gaussian noise and outliers according to the JSON configuration.
-3. **Solve** — Each solver listed in the config is called with identical inputs. The built-in solvers sweep polynomial degrees 1 to `maxDegree`.
+3. **Solve** — Each solver listed in the config is called with identical inputs. The built-in solvers sweep polynomial degrees 1 to `degree`.
 4. **Report** — Metrics (RMSE, Max Absolute Error, MAE) are aggregated into CSV/JSON/MAT tables; diagnostic plots are saved as PNGs.
 
 ## Configuration reference
@@ -114,7 +131,7 @@ An array of solver specifications:
 |-------|------|-------------|
 | `name` | string | Display name used in output tables and legends |
 | `function` | string | Fully qualified MATLAB function (e.g. `"adaptivehb.solvers.mewlsSolver"`) |
-| `parameters` | object | Passed verbatim to the solver function |
+| `parameters` | object | Passed verbatim to the solver as `method_data` struct |
 
 ### `metrics`
 
@@ -125,7 +142,7 @@ An array of metric names to include in the output: `"rmse"`, `"maxAbsError"`, `"
 | Columns | Format | Description |
 |---------|--------|-------------|
 | 3 | `x  y  f` | Clean dataset — observed value equals true value |
-| 5 | `x  y  fTrue  fObserved  isOutlier` | Noisy dataset with outlier flags (0/1) |
+| 5 | `x  y  f_true  f  is_outlier` | Noisy dataset with outlier flags (0/1) |
 
 All columns are space-separated. The loader auto-detects the format.
 
@@ -138,8 +155,8 @@ Each call to `run_comparison` creates `reports/comparison_<timestamp>/` containi
 | `metrics.csv` | Aggregated metrics table with delta columns |
 | `metrics.json` | Same data in JSON format |
 | `metrics_table.mat` | MATLAB table saved for programmatic use |
-| `solution_surfaces.png` | Ground truth vs solver predictions (3-D scatter) |
-| `error_distributions.png` | Per-solver residual histograms (PDF normalised) |
+| `solution_surfaces.png` | Ground truth vs solver QI approximations (3-D scatter) |
+| `error_distributions.png` | Per-solver error histograms (PDF normalised) |
 | `convergence_curves.png` | RMSE decay over polynomial degree |
 | `dataset_snapshot.mat` | Copy of the dataset struct used during the run |
 
@@ -148,21 +165,21 @@ Each call to `run_comparison` creates `reports/comparison_<timestamp>/` containi
 1. Create a function file in `src/+adaptivehb/+solvers/` (or anywhere on the MATLAB path):
 
 ```matlab
-function result = mySolver(dataset, params)
-    % dataset.xy        — N-by-2 coordinates
-    % dataset.fObserved — N-by-1 observed values
-    % dataset.fTrue     — N-by-1 true values (for metrics)
-    % dataset.isOutlier — N-by-1 logical mask
-    % params            — struct with your custom parameters
+function result = mySolver(dataset, method_data)
+    % dataset.data       — N-by-2 coordinates (normalizzate in [0,1]^2)
+    % dataset.f          — N-by-1 observed values
+    % dataset.f_true     — N-by-1 true values (for metrics)
+    % dataset.is_outlier — N-by-1 logical mask
+    % method_data        — struct with your custom parameters
 
     % ... your fitting logic ...
 
-    prediction = ...;  % N-by-1
+    QI = ...;  % N-by-1 approssimazione
 
-    m = adaptivehb.solvers.compute_metrics(dataset.fTrue, prediction);
+    m = adaptivehb.solvers.compute_metrics(dataset.f_true, QI);
     result.name = "MySolver";
-    result.prediction = prediction;
-    result.coefficients = [];
+    result.QI = QI;
+    result.QI_coeff = [];
     result.metrics = struct('rmse', m(1), 'maxAbsError', m(2), 'mae', m(3));
     result.convergence = table();  % optional
 end
@@ -174,7 +191,7 @@ end
 {
   "name": "MySolver",
   "function": "adaptivehb.solvers.mySolver",
-  "parameters": { "myParam": 42 }
+  "parameters": { "degree": 3, "myParam": 42 }
 }
 ```
 
@@ -184,62 +201,62 @@ end
 
 ### Ordinary Least Squares (OLS)
 
-Given N data points (x_i, y_i, f_i) and a polynomial design matrix **A** whose columns are the monomials x^p · y^q with p + q ≤ d, OLS finds the coefficient vector **c** that minimises:
+Given N data points (x_i, y_i, f_i) and a polynomial design matrix **A** (Phi) whose columns are the monomials x^p · y^q with p + q ≤ d, OLS finds the coefficient vector **QI_coeff** that minimises:
 
 ```
-||A·c - f||²
+||A·QI_coeff - f||²
 ```
 
-Solution: **c** = **A** \ **f** (MATLAB backslash operator).
+Solution: **QI_coeff** = **A** \ **f** (MATLAB backslash operator).
 
 ### Maximum Entropy Weighted Least Squares (MEWLS)
 
 MEWLS introduces a diagonal weight matrix **W** = diag(w₁, …, wₙ) and solves:
 
 ```
-||W^(1/2) (A·c - f)||²
+||W^(1/2) (A·QI_coeff - f)||²
 ```
 
-Solution: **c** = (A'WA)⁻¹ A'W**f**
+Solution: **QI_coeff** = (A'WA)⁻¹ A'W**f**
 
-The weights are computed as:
+I pesi sono calcolati come:
 
 ```
-w_i = exp(-entropyScale · ||p_i - centroid||²)
+w_i = exp(-lambda · ||p_i - centroid||²)
 ```
 
-where `centroid` is the mean of the point cloud. Samples flagged as outliers have their weight multiplied by `outlierPenalty` (default 0.5), reducing their influence on the fit.
+dove `centroid` è la media del punto cloud e `lambda` controlla la velocità di decadimento. I campioni identificati come outlier hanno il loro peso moltiplicato per `alpha_out` (default 0.5).
 
 **Parameter guidance:**
-- `entropyScale` = 1–5: mild weighting, close to OLS behaviour
-- `entropyScale` = 10–20: moderate weighting (recommended starting range)
-- `entropyScale` > 30: aggressive weighting, strong centroid bias
-- `outlierPenalty` = 0.0: outliers are completely ignored
-- `outlierPenalty` = 0.5: outliers contribute at half weight (default)
-- `outlierPenalty` = 1.0: no penalty (equivalent to ignoring outlier flags)
+- `lambda` = 1–5: mild weighting, close to OLS behaviour
+- `lambda` = 10–20: moderate weighting (recommended starting range)
+- `lambda` > 30: aggressive weighting, strong centroid bias
+- `alpha_out` = 0.0: outliers are completely ignored
+- `alpha_out` = 0.5: outliers contribute at half weight (default)
+- `alpha_out` = 1.0: no penalty (equivalent to ignoring outlier flags)
 
 ### Error metrics
 
 | Metric | Formula | Interpretation |
 |--------|---------|----------------|
-| RMSE | sqrt(mean((fTrue - pred)²)) | Average error magnitude, penalises large errors |
-| MaxAbsError | max(\|fTrue - pred\|) | Worst-case point error |
-| MAE | mean(\|fTrue - pred\|) | Average absolute deviation |
+| RMSE | sqrt(mean((f_true - QI)²)) | Average error magnitude, penalises large errors |
+| MaxAbsError | max(\|f_true - QI\|) | Worst-case point error |
+| MAE | mean(\|f_true - QI\|) | Average absolute deviation |
 
 ## API reference
 
 | Function | Signature | Description |
 |----------|-----------|-------------|
-| `adaptivehb.solvers.leastSquaresSolver` | `result = leastSquaresSolver(dataset, params)` | OLS polynomial surface fitter |
-| `adaptivehb.solvers.mewlsSolver` | `result = mewlsSolver(dataset, params)` | MEWLS entropy-weighted fitter |
-| `adaptivehb.solvers.polynomialDesignMatrix` | `[A, terms] = polynomialDesignMatrix(xy, maxDegree)` | 2-D polynomial design matrix |
-| `adaptivehb.solvers.compute_metrics` | `metrics = compute_metrics(fTrue, prediction)` | Compute [RMSE, MaxAbs, MAE] |
+| `adaptivehb.solvers.leastSquaresSolver` | `result = leastSquaresSolver(dataset, method_data)` | OLS polynomial surface fitter |
+| `adaptivehb.solvers.mewlsSolver` | `result = mewlsSolver(dataset, method_data)` | MEWLS entropy-weighted fitter |
+| `adaptivehb.solvers.polynomialDesignMatrix` | `[A, terms] = polynomialDesignMatrix(data, degree)` | 2-D polynomial design matrix |
+| `adaptivehb.solvers.compute_metrics` | `metrics = compute_metrics(f_true, QI)` | Compute [RMSE, MaxAbs, MAE] |
 | `adaptivehb.io.load_dataset` | `dataset = load_dataset(filePath, options)` | Load point-cloud data from text file |
 | `adaptivehb.io.apply_noise` | `dataset = apply_noise(dataset, noiseCfg)` | Struct-level noise (JSON-driven) |
 | `adaptivehb.data.apply_noise` | `[augmented, metadata] = apply_noise(x, y, f, settings)` | Vector-level noise (gauss/spike) |
 | `adaptivehb.data.format_noise_filename` | `filename = format_noise_filename(baseName, metadata, options)` | Build noise-encoding filename |
 | `adaptivehb.viz.plot_solution_surface` | `fig = plot_solution_surface(dataset, solverResults)` | 3-D surface comparison figure |
-| `adaptivehb.viz.plot_error_distribution` | `fig = plot_error_distribution(dataset, solverResults)` | Residual histogram figure |
+| `adaptivehb.viz.plot_error_distribution` | `fig = plot_error_distribution(dataset, solverResults)` | Error histogram figure |
 | `adaptivehb.viz.plot_convergence_curve` | `fig = plot_convergence_curve(solverResults)` | RMSE convergence figure |
 
 ## Running the tests

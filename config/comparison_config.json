@@ -15,15 +15,15 @@
       "name": "LeastSquares",
       "function": "adaptivehb.solvers.leastSquaresSolver",
       "parameters": {
-        "maxDegree": 3
+        "degree": 3
       }
     },
     {
       "name": "MEWLS",
       "function": "adaptivehb.solvers.mewlsSolver",
       "parameters": {
-        "maxDegree": 3,
-        "entropyScale": 15.0
+        "degree": 3,
+        "lambda": 15.0
       }
     }
   ],

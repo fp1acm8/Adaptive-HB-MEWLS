@@ -14,7 +14,7 @@
 %      output directory, noise type, and corruption parameters.
 %
 % The output file has five columns:
-%   x  y  fTrue  fNoisy  isOutlier
+%   x  y  f_true  f_noisy  is_outlier
 %
 % See also adaptivehb.data.apply_noise, adaptivehb.data.format_noise_filename.
 
@@ -63,8 +63,8 @@ end
 
 % Load the dataset as a numeric matrix using MATLAB's built-in load().
 % Expected shape: N rows x 3 columns (x, y, f).
-data = load(input_path);
-if size(data, 2) ~= 3
+raw_data = load(input_path);
+if size(raw_data, 2) ~= 3
     error('The file must contain exactly 3 columns: x y f');
 end
 
@@ -140,12 +140,12 @@ end
 % =====================================================================
 
 % Extract the three columns from the loaded data matrix.
-x = data(:, 1);      % x coordinates
-y = data(:, 2);      % y coordinates
-f_true = data(:, 3); % true function values (clean)
+x     = raw_data(:, 1);  % x coordinates
+y     = raw_data(:, 2);  % y coordinates
+f_true = raw_data(:, 3); % true function values (clean)
 
 % Call the vector-level noise injector. Returns:
-%   augmented : struct with fields x, y, fTrue, fNoisy, isOutlier
+%   augmented : struct with fields x, y, f_true, f_noisy, is_outlier
 %   metadata  : struct with bookkeeping info (numOutliers, noiseLabel, etc.)
 [augmented, metadata] = adaptivehb.data.apply_noise(x, y, f_true, settings);
 
@@ -175,8 +175,9 @@ filename = adaptivehb.data.format_noise_filename(input_name, metadata, ...
 output_path = fullfile(output_dir, filename);
 
 % Assemble the 5-column output matrix:
-%   col 1: x, col 2: y, col 3: fTrue, col 4: fNoisy, col 5: isOutlier (0/1).
-data_to_write = [augmented.x, augmented.y, augmented.fTrue, augmented.fNoisy, augmented.isOutlier];
+%   col 1: x, col 2: y, col 3: f_true, col 4: f_noisy, col 5: is_outlier (0/1).
+data_to_write = [augmented.x, augmented.y, augmented.f_true, ...
+                 augmented.f_noisy, augmented.is_outlier];
 
 % Open the output file for writing. Abort with a clear error if it fails.
 fid = fopen(output_path, 'w');

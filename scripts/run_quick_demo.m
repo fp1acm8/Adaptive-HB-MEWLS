@@ -31,8 +31,7 @@ oldPath  = path;
 
 % Register an onCleanup object that restores the original path when this
 % function exits (normally or via error).  The %#ok<NASGU> pragma tells
-% the MATLAB linter to suppress the "unused variable" warning — the
-% variable must exist for the cleanup callback to fire on scope exit.
+% the MATLAB linter to suppress the "unused variable" warning.
 cleanup  = onCleanup(@() path(oldPath)); %#ok<NASGU>
 
 % Prepend src/ to the path so all adaptivehb.* calls resolve correctly.
@@ -46,19 +45,20 @@ fprintf('=== Adaptive-HB-MEWLS Quick Demo ===\n\n');
 % =====================================================================
 
 % Build the full path to the glacier.txt dataset shipped with the repo.
-% This is a 3-column (x, y, f) file with no noise or outliers.
+% I dati sono nella forma (u,v,f(u,v)), formato compatibile con il
+% dominio [0,1]x[0,1] del codice HBS (geo_square.txt).
 dataPath = fullfile(repoRoot, 'data', 'glacier.txt');
 
 % Inform the user which file is being loaded (aids troubleshooting).
 fprintf('Loading dataset: %s\n', dataPath);
 
 % Call the IO loader with normalisation enabled.  Normalisation maps
-% the x-y coordinates into [0,1]² via min-max scaling, which improves
+% the x-y coordinates into [0,1]^2 via min-max scaling, which improves
 % the numerical conditioning of the polynomial design matrix.
 dataset = adaptivehb.io.load_dataset(dataPath, struct('normalize', true));
 
 % Report the sample count so the user can verify the file was parsed.
-fprintf('  Samples: %d\n', size(dataset.xy, 1));
+fprintf('  Samples: %d\n', size(dataset.data, 1));
 
 % =====================================================================
 %  Step 2: Inject Gaussian noise with 5% outliers
@@ -69,63 +69,59 @@ fprintf('  Samples: %d\n', size(dataset.xy, 1));
 %   standardDeviation - sigma of the Gaussian perturbation
 %   outlierFraction   - 5% of samples will receive inflated noise
 %   outlierInflation  - outlier values are multiplied by 1 + 0.2 = 1.2
-%   seed              - RNG seed for reproducibility (same seed → same noise)
+%   seed              - RNG seed for reproducibility (same seed -> same noise)
 noiseCfg = struct('type', 'gaussian', 'standardDeviation', 0.05, ...
     'outlierFraction', 0.05, 'outlierInflation', 0.2, 'seed', 42);
 
 % Apply the noise to the dataset struct in-place.  After this call,
-% dataset.fObserved differs from dataset.fTrue and dataset.isOutlier
+% dataset.f differs from dataset.f_true and dataset.is_outlier
 % flags the corrupted samples.
 dataset = adaptivehb.io.apply_noise(dataset, noiseCfg);
 
 % Print a summary of the noise settings for the user's reference.
-% The double %% is needed because fprintf interprets single % as a
-% format specifier; %% produces a literal percent sign in the output.
 fprintf('  Noise applied: Gaussian (sigma=%.2f, outliers=%.0f%%)\n', ...
     noiseCfg.standardDeviation, noiseCfg.outlierFraction * 100);
 
 % =====================================================================
-%  Step 3: Run both solvers (OLS and MEWLS) on the noisy dataset
+%  Step 3: Run both solvers (OLS e MEWLS) on the noisy dataset
 % =====================================================================
 
-% Maximum polynomial degree to fit.  The solvers sweep d = 1..maxDegree,
-% building the design matrix Φ_d at each degree and recording metrics.
-% degree 3 ⇒ 10 basis functions: M = (3+1)(3+2)/2 = 10.
-maxDegree = 3;
+% Massimo grado del polinomio. I solver eseguono d = 1..degree,
+% costruendo la matrice di design Phi_d ad ogni grado.
+% degree 3 => 10 funzioni base: M = (3+1)(3+2)/2 = 10.
+degree = 3;
 
 % Inform the user before the (potentially slow) solver calls.
-fprintf('\nRunning solvers with maxDegree = %d ...\n', maxDegree);
+fprintf('\nRunning solvers with degree = %d ...\n', degree);
 
 % --- OLS solver (Ordinary Least Squares) ---
-% This is the unweighted baseline: minimises ||Φc - f||² via c = Φ\f.
-% No entropy weights; all data points contribute equally.
+% This is the unweighted baseline: minimises ||Phi*QI_coeff - f||^2
+% via QI_coeff = Phi\f. No entropy weights; all data points contribute equally.
 lsResult = adaptivehb.solvers.leastSquaresSolver(dataset, ...
-    struct('maxDegree', maxDegree));
+    struct('degree', degree));
 
 % --- MEWLS solver (Maximum Entropy Weighted Least Squares) ---
-% This solver computes entropy-based weights w_i = exp(-λ ||x_i - c̄||²)
-% and solves the weighted system (Φ'WΦ)c = Φ'Wf.  The entropyScale
-% parameter (λ = 15.0 here) controls how quickly the weights decay with
-% distance from the centroid.  Ref: Brugnano et al. (2024), Section 3.
+% This solver computes entropy-based weights w_i = exp(-lambda * ||x_i - c||^2)
+% and solves the weighted system (Phi'WPhi)*QI_coeff = Phi'W*f.
+% The lambda parameter (= 15.0 here) controls how quickly the weights decay
+% with distance from the centroid.  Ref: Brugnano et al. (2024), Section 3.
 mewlsResult = adaptivehb.solvers.mewlsSolver(dataset, ...
-    struct('maxDegree', maxDegree, 'entropyScale', 15.0));
+    struct('degree', degree, 'lambda', 15.0));
 
 % =====================================================================
 %  Step 4: Print a formatted metrics comparison table
 % =====================================================================
 
 % Print the table header with fixed-width columns for alignment.
-% %-18s: left-aligned solver name (18 chars wide)
-% %12s:  right-aligned metric labels (12 chars wide each)
 fprintf('\n%-18s %12s %12s %12s\n', 'Solver', 'RMSE', 'MaxAbsErr', 'MAE');
 
 % Print a horizontal separator line (56 dashes matching the total width).
 fprintf('%s\n', repmat('-', 1, 56));
 
 % Print the OLS (LeastSquares) metrics row.
-% metrics.rmse:        root mean squared error √(1/N · Σe²)
-% metrics.maxAbsError: L∞ norm of the error vector max|e_i|
-% metrics.mae:         mean absolute error 1/N · Σ|e_i|
+% metrics.rmse:        root mean squared error sqrt(1/N * sum(error^2))
+% metrics.maxAbsError: L-inf norm max|error_i|
+% metrics.mae:         mean absolute error 1/N * sum(|error_i|)
 fprintf('%-18s %12.6f %12.6f %12.6f\n', 'LeastSquares', ...
     lsResult.metrics.rmse, lsResult.metrics.maxAbsError, lsResult.metrics.mae);
 
@@ -134,13 +130,12 @@ fprintf('%-18s %12.6f %12.6f %12.6f\n', 'MEWLS', ...
     mewlsResult.metrics.rmse, mewlsResult.metrics.maxAbsError, mewlsResult.metrics.mae);
 
 % =====================================================================
-%  Step 5: Show the delta (MEWLS − OLS) for each metric
+%  Step 5: Show the delta (MEWLS - OLS) for each metric
 % =====================================================================
 
 % The delta tells the user whether MEWLS improved or worsened each
 % metric compared to the OLS baseline.  Negative delta = improvement
-% (lower error), positive = regression.  The %+.6f format forces a
-% sign character (+/-) before the number for clarity.
+% (lower error), positive = regression.
 fprintf('\nDelta (MEWLS - LS):\n');
 fprintf('  RMSE:        %+.6f\n', mewlsResult.metrics.rmse - lsResult.metrics.rmse);
 fprintf('  MaxAbsError: %+.6f\n', mewlsResult.metrics.maxAbsError - lsResult.metrics.maxAbsError);

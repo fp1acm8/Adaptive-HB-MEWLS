@@ -10,7 +10,7 @@ function [augmented, metadata] = apply_noise(x, y, f, settings)
 %       noiseType         - 'gauss' or 'spike' (default: 'gauss')
 %
 %   The function returns AUGMENTED, a struct containing the vectors x, y,
-%   fTrue, fNoisy and isOutlier (logical mask), and METADATA which stores
+%   f_true, f_noisy and is_outlier (logical mask), and METADATA which stores
 %   bookkeeping information about the corruption that was applied.
 %
 %   The helper adaptivehb.data.format_noise_filename can be used together
@@ -45,8 +45,8 @@ function [augmented, metadata] = apply_noise(x, y, f, settings)
     M = numel(f);                   % total number of samples
     rangeF = max(f) - min(f);       % range of the signal (used to scale noise)
 
-    isOutlier = false(M, 1);       % logical mask: true for corrupted points
-    fNoisy = f;                     % start with a copy of the clean signal
+    is_outlier = false(M, 1);      % logical mask: true for corrupted points
+    f_noisy = f;                    % start with a copy of the clean signal
     outlierIdx = [];                % indices of corrupted samples
     noiseVector = zeros(0, 1);      % actual noise values added
 
@@ -62,7 +62,7 @@ function [augmented, metadata] = apply_noise(x, y, f, settings)
         if numOutliers > 0
             % Randomly select numOutliers indices without replacement.
             outlierIdx = randperm(M, numOutliers).';
-            isOutlier(outlierIdx) = true;  % flag them in the mask
+            is_outlier(outlierIdx) = true;  % flag them in the mask
 
             % Generate the noise vector whose amplitude is proportional to
             % outlierIntensity * range(f).  This ensures the noise scale
@@ -80,17 +80,17 @@ function [augmented, metadata] = apply_noise(x, y, f, settings)
             end
 
             % Add the noise to the selected samples only.
-            fNoisy(outlierIdx) = fNoisy(outlierIdx) + noiseVector;
+            f_noisy(outlierIdx) = f_noisy(outlierIdx) + noiseVector;
         end
     end
 
     % --- Pack the augmented dataset into a struct ---------------------
-    augmented = struct(
+    augmented = struct(...
         'x', x, ...               % x coordinates (unchanged)
         'y', y, ...               % y coordinates (unchanged)
-        'fTrue', f, ...           % original clean values
-        'fNoisy', fNoisy, ...     % corrupted values (= fTrue when no noise)
-        'isOutlier', isOutlier    % logical mask of corrupted points
+        'f_true', f, ...          % original clean values
+        'f_noisy', f_noisy, ...   % corrupted values (= f_true when no noise)
+        'is_outlier', is_outlier  % logical mask of corrupted points
     );
 
     % --- Build metadata for traceability ------------------------------

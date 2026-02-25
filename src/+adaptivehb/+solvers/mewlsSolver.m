@@ -1,10 +1,10 @@
-function result = mewlsSolver(dataset, params)
+function result = mewlsSolver(dataset, method_data)
 %MEWLSSOLVER Maximum Entropy Weighted Least Squares polynomial fitter.
-%   RESULT = MEWLSSOLVER(DATASET, PARAMS) fits a polynomial surface using
-%   Weighted Least Squares (WLS) where sample weights are derived from a
-%   maximum-entropy inspired criterion.  Like the OLS baseline
+%   RESULT = MEWLSSOLVER(DATASET, METHOD_DATA) fits a polynomial surface
+%   using Weighted Least Squares (WLS) where sample weights are derived
+%   from a maximum-entropy inspired criterion.  Like the OLS baseline
 %   (leastSquaresSolver), the solver sweeps polynomial degrees from 1 to
-%   PARAMS.maxDegree and records the full convergence history.
+%   METHOD_DATA.degree and records the full convergence history.
 %
 %   Reference
 %   ---------
@@ -22,150 +22,157 @@ function result = mewlsSolver(dataset, params)
 %      Low lambda  -> nearly uniform weights (approaches OLS).
 %      High lambda -> weights concentrated near the centroid.
 %   3. Penalise samples flagged as outliers by multiplying their weight
-%      by outlierPenalty (default 0.5), reducing their influence.
-%   4. Normalise: w = w / sum(w), then clamp to eps for numerical safety.
+%      by alpha_out (default 0.5), reducing their influence.
+%   4. Normalise: weight = weight / sum(weight), then clamp to eps.
 %   5. Build the design matrix Phi for polynomial space Pi_d^2.
 %   6. Solve the WLS normal equations:
-%          (Phi' W Phi) c = Phi' W f                [Eq. in Sec. 3]
+%          (Phi' W Phi) QI_coeff = Phi' W f          [Eq. in Sec. 3]
 %
 %   Inputs:
-%       DATASET  - struct from adaptivehb.io.load_dataset with fields
-%                  xy (N-by-2), fObserved (N-by-1), fTrue, isOutlier.
-%       PARAMS   - struct with optional fields:
-%                    maxDegree      : max polynomial degree (default 3)
-%                    entropyScale   : lambda, controls weight decay rate
-%                                    (default 10). Range: 1..50.
-%                    outlierPenalty : multiplicative factor applied to
-%                                    outlier weights (default 0.5).
+%       DATASET     - struct from adaptivehb.io.load_dataset with fields
+%                     data (N-by-2), f (N-by-1), f_true, is_outlier.
+%       METHOD_DATA - struct with optional fields:
+%                       degree    : max polynomial degree (default 3)
+%                       lambda    : controls weight decay rate (default 10).
+%                                   Range: 1..50.
+%                       alpha_out : multiplicative factor applied to
+%                                   outlier weights (default 0.5).
 %
 %   Output:
 %       RESULT - struct with fields:
 %           name         - "MEWLS"
-%           prediction   - N-by-1 fitted values (final degree)
-%           coefficients - polynomial coefficients (final degree)
+%           QI           - N-by-1 fitted values (final degree)
+%           QI_coeff     - polynomial coefficients (final degree)
 %           metrics      - struct with rmse, maxAbsError, mae
 %           convergence  - table with degree-by-degree error history
-%           weights      - N-by-1 normalised sample weights
+%           weight       - N-by-1 normalised sample weights
+%
+%   Nota: l'implementazione a B-spline gerarchiche adattive (HBS) che
+%   estende questo solver polinomiale richiede la libreria GeoPDEs per MATLAB.
+%   Disponibile su: https://rafavzqz.github.io/geopdes/
+%   La funzione analoga nel codice HBS e':
+%       getcoeff_weighted_least_squares_pen(hspace,hmsh,data,f,lambda,weight)
 %
 %   See also adaptivehb.solvers.leastSquaresSolver,
 %            adaptivehb.solvers.polynomialDesignMatrix,
 %            adaptivehb.solvers.compute_metrics.
 
 % --- Input validation (MATLAB R2020b+ arguments block) ---------------
-% dataset must be a scalar struct; params defaults to empty struct so that
+% dataset must be a scalar struct; method_data defaults to empty struct so
 % all parameters below become optional.
 arguments
     dataset (1, 1) struct
-    params (1, 1) struct = struct()
+    method_data (1, 1) struct = struct()
 end
 
 % --- Default parameter handling ---------------------------------------
 
-% maxDegree (d): highest total polynomial degree used in the sweep over
+% degree (d): highest total polynomial degree used in the sweep over
 % the bivariate polynomial space Pi_d^2 (Brugnano et al. 2024, Sec. 3).
 % Default d=3 gives M=(3+1)(3+2)/2 = 10 basis functions.
-if ~isfield(params, 'maxDegree') || isempty(params.maxDegree)
-    params.maxDegree = 3;
+if ~isfield(method_data, 'degree') || isempty(method_data.degree)
+    method_data.degree = 3;
 end
 
-% entropyScale (lambda in the paper): controls how fast the MEWLS weights
-% decay with distance from the centroid.
+% lambda: controls how fast the MEWLS weights decay with distance from
+% the centroid.
 %   lambda ~ 1-5   : mild decay, weights nearly uniform (close to OLS)
 %   lambda ~ 10-20 : moderate decay (recommended starting range)
 %   lambda > 30    : aggressive decay, strong centroid bias
 % Ref: Brugnano et al. 2024, weight function w_i = exp(-lambda * d_i^2).
-if ~isfield(params, 'entropyScale') || isempty(params.entropyScale)
-    params.entropyScale = 10.0;
+if ~isfield(method_data, 'lambda') || isempty(method_data.lambda)
+    method_data.lambda = 10.0;
 end
 
-% outlierPenalty (alpha_out): multiplicative factor for outlier weights.
+% alpha_out: multiplicative factor for outlier weights.
 %   0.0 -> outliers completely ignored
 %   0.5 -> outliers contribute at half weight (default)
 %   1.0 -> no penalty (outlier flag has no effect)
-if ~isfield(params, 'outlierPenalty') || isempty(params.outlierPenalty)
-    params.outlierPenalty = 0.5;
+if ~isfield(method_data, 'alpha_out') || isempty(method_data.alpha_out)
+    method_data.alpha_out = 0.5;
 end
 
-% Clamp maxDegree to at least 1 (degree 0 = constant is trivial).
-maxDegree = max(1, params.maxDegree);
+% Clamp degree to at least 1 (degree 0 = constant is trivial).
+degree = max(1, method_data.degree);
 
-% Store lambda and penalty in local variables for readability.
-scale = params.entropyScale;            % lambda in the paper
-outlierPenalty = params.outlierPenalty;  % alpha_out
+% Store lambda and penalty in local variables (stile vecchio codice).
+lambda    = method_data.lambda;    % lambda: parametro di scala dei pesi
+alpha_out = method_data.alpha_out; % alpha_out: penalizzazione outlier
+
+% --- Extract data vectors for readability (stile vecchio codice) ------
+data       = dataset.data;       % N-by-2 coordinate matrix
+f          = dataset.f;          % N-by-1 observed values
+f_true     = dataset.f_true;     % N-by-1 true values
+is_outlier = dataset.is_outlier; % N-by-1 logical outlier mask
 
 % --- Entropy weight computation (Brugnano et al. 2024, Sec. 3) -------
-% Build the MEWLS weight vector w (N-by-1):
+% Build the MEWLS weight vector (N-by-1):
 %   w_i = exp(-lambda * ||x_i - centroid||^2)
-% then penalise outliers and normalise so sum(w) = 1.
-weights = compute_entropy_weights(dataset.xy, scale, dataset.isOutlier, outlierPenalty);
+% then penalise outliers and normalise so sum(weight) = 1.
+weight = compute_entropy_weights(data, lambda, is_outlier, alpha_out);
 
 % Construct the diagonal weight matrix W = diag(w_1, ..., w_N).
-% This appears as W in the WLS normal equations: (Phi' W Phi) c = Phi' W f.
-W = diag(weights);
+% This appears as W in the WLS normal equations: (Phi' W Phi) QI_coeff = Phi' W f.
+W = diag(weight);
 
 % --- Polynomial degree sweep ------------------------------------------
-% Fit polynomials of total degree d = 1, 2, ..., maxDegree and record
+% Fit polynomials of total degree d = 1, 2, ..., degree and record
 % error metrics at each step. This provides a convergence curve showing
 % how the approximation improves with richer polynomial spaces Pi_d^2.
-metricsHistory = zeros(maxDegree, 3); % each row: [RMSE, maxAbsErr, MAE]
-degreeList = 1:maxDegree;             % degrees to evaluate
-coeffHistory = cell(1, maxDegree);        % polynomial coefficients per degree
-predictionHistory = cell(1, maxDegree);   % predicted values per degree
+metricsHistory   = zeros(degree, 3); % each row: [RMSE, maxAbsErr, MAE]
+degreeList       = 1:degree;         % degrees to evaluate
+QI_coeff_history = cell(1, degree);  % polynomial coefficients per degree
+QI_history       = cell(1, degree);  % QI values per degree
 
 for d = degreeList
     % Build the design matrix Phi_d in R^{N x M_d} for the bivariate
     % polynomial space Pi_d^2 where M_d = (d+1)(d+2)/2 columns.
     % Each column is one monomial x^p * y^q with p+q <= d.
     % Ref: Brugnano et al. 2024, polynomial basis construction.
-    [A, ~] = adaptivehb.solvers.polynomialDesignMatrix(dataset.xy, d);
+    [A, ~] = adaptivehb.solvers.polynomialDesignMatrix(data, d);
 
     % Solve the WLS normal equations (Brugnano et al. 2024, Sec. 3):
-    %   c = (Phi' W Phi) \ (Phi' W f)
-    % This minimises the weighted residual: sum_i w_i*(f_i - p(x_i,y_i))^2
-    % where p is the polynomial of degree d and w_i are the MEWLS weights.
-    coeffs = (A' * W * A) \ (A' * W * dataset.fObserved);
+    %   QI_coeff = (Phi' W Phi) \ (Phi' W f)
+    % This minimises the weighted residual:
+    %   sum_i w_i * (f_i - p(x_i,y_i))^2
+    % Analogo a: S = col_matrix*diag(weight)*col_matrix'; QI_coeff = S\rhs
+    QI_coeff = (A' * W * A) \ (A' * W * f);
 
-    % Evaluate the fitted polynomial at all data points: f_hat = Phi * c.
-    prediction = A * coeffs;
+    % Evaluate the fitted polynomial at all data points: QI = Phi * QI_coeff.
+    QI = A * QI_coeff;
 
-    % Compute RMSE, maxAbsError, MAE between true values and prediction.
-    % These quantify the approximation quality for this degree.
-    metricsHistory(d, :) = adaptivehb.solvers.compute_metrics(dataset.fTrue, prediction);
+    % Compute RMSE, maxAbsError, MAE between true values and QI.
+    metricsHistory(d, :) = adaptivehb.solvers.compute_metrics(f_true, QI);
 
-    % Store coefficient vector and prediction for this degree so we can
-    % retrieve the final-degree results after the loop ends.
-    coeffHistory{d} = coeffs;
-    predictionHistory{d} = prediction;
+    % Store coefficient vector and QI for this degree.
+    QI_coeff_history{d} = QI_coeff;
+    QI_history{d} = QI;
 end
 
 % --- Assemble output struct -------------------------------------------
 
 % Use results from the highest polynomial degree as the final output.
-finalPrediction = predictionHistory{end};
+QI_final = QI_history{end};
 
-% Pack the three metric values from the last degree into a named struct
-% for convenient access: result.metrics.rmse, result.metrics.maxAbsError, etc.
+% Pack the three metric values from the last degree into a named struct.
 metricNames = {"rmse", "maxAbsError", "mae"};
 metricsStruct = cell2struct(num2cell(metricsHistory(end, :)), metricNames, 2);
 
-% Build a convergence table so the caller can plot RMSE vs degree or
-% inspect how each metric evolves across the polynomial degree sweep.
+% Build a convergence table so the caller can plot RMSE vs degree.
 convergence = table();
-convergence.degree = degreeList';       % polynomial degrees 1..maxDegree
+convergence.degree = degreeList';       % polynomial degrees 1..degree
 convergence.rmse = metricsHistory(:, 1);
 convergence.maxAbsError = metricsHistory(:, 2);
 convergence.mae = metricsHistory(:, 3);
 
-% Return all results in a single struct. The 'name' field is overwritten
-% by run_comparison with the name from the JSON config, but we provide a
-% default here for standalone usage.
+% Return all results in a single struct.
 result = struct(...
     'name', "MEWLS", ...
-    'prediction', finalPrediction, ...       % N-by-1 fitted values
-    'coefficients', coeffHistory{end}, ...   % M-by-1 polynomial coeffs
-    'metrics', metricsStruct, ...            % struct with rmse/maxAbsError/mae
-    'convergence', convergence, ...          % table: degree x metrics
-    'weights', weights);                     % N-by-1 MEWLS weights (for diagnostics)
+    'QI', QI_final, ...                     % N-by-1 fitted values
+    'QI_coeff', QI_coeff_history{end}, ...  % M-by-1 polynomial coefficients
+    'metrics', metricsStruct, ...           % struct with rmse/maxAbsError/mae
+    'convergence', convergence, ...         % table: degree x metrics
+    'weight', weight);                      % N-by-1 MEWLS weights (per diagnostica)
 
 end
 
@@ -174,35 +181,35 @@ end
 %  Local function: compute_entropy_weights
 %  Implements the MEWLS weight function (Brugnano et al. 2024, Sec. 3).
 % =====================================================================
-function weights = compute_entropy_weights(xy, scale, isOutlier, outlierPenalty)
+function weight = compute_entropy_weights(data, lambda, is_outlier, alpha_out)
 %COMPUTE_ENTROPY_WEIGHTS Build normalised entropy-based sample weights.
 %   Implements: w_i = exp(-lambda * ||x_i - c||^2)
-%   where c = centroid, lambda = scale.
+%   where c = centroid, lambda = scale parameter.
 
 % Step 1: Compute the centroid (mean) of the 2D point cloud.
 % This is the reference centre for the distance-based weighting.
-centroid = mean(xy, 1);  % 1-by-2 vector [mean_x, mean_y]
+centroid = mean(data, 1);  % 1-by-2 vector [mean_x, mean_y]
 
 % Step 2: Squared Euclidean distance of each point from the centroid.
 % d_i^2 = (x_i - c_x)^2 + (y_i - c_y)^2
 % We keep the squared form because the weight function uses d^2 directly.
-dist2 = sum((xy - centroid) .^ 2, 2);  % N-by-1
+dist2 = sum((data - centroid) .^ 2, 2);  % N-by-1
 
 % Step 3: Entropy-inspired weight (Brugnano et al. 2024, Eq. in Sec. 3):
 %   w_i = exp(-lambda * d_i^2)
 % Points close to the centroid receive weight ~ 1; distant points receive
-% exponentially smaller weights controlled by lambda (= scale).
-raw = exp(-scale * dist2);  % N-by-1, all positive
+% exponentially smaller weights controlled by lambda.
+raw = exp(-lambda * dist2);  % N-by-1, all positive
 
-% Step 4: Down-weight outlier samples by the penalty factor.
-% Multiplying by outlierPenalty < 1 reduces their influence on the WLS fit.
-raw(isOutlier) = raw(isOutlier) * outlierPenalty;
+% Step 4: Down-weight outlier samples by the penalty factor alpha_out.
+% Multiplying by alpha_out < 1 reduces their influence on the WLS fit.
+raw(is_outlier) = raw(is_outlier) * alpha_out;
 
 % Step 5: Normalise weights to sum to 1 (discrete probability distribution).
 % This makes the scale of W independent of the number of samples N.
-weights = raw / sum(raw);
+weight = raw / sum(raw);
 
 % Step 6: Clamp any zero or near-zero weights to machine epsilon.
 % Prevents singular or ill-conditioned (Phi' W Phi) in the normal equations.
-weights(weights <= 0) = eps;
+weight(weight <= 0) = eps;
 end
