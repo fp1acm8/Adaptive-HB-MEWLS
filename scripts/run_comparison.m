@@ -15,10 +15,10 @@ function run_comparison(configPath)
 %
 %   The function assumes the repository root is the current working folder.
 %
-%   Nota: l'implementazione a B-spline gerarchiche adattive (HBS) che estende
-%   questo confronto polinomiale richiede la libreria GeoPDEs per MATLAB.
-%   Disponibile su: https://rafavzqz.github.io/geopdes/
-%   Le funzioni GeoPDEs utilizzate nel codice HBS sono:
+%   Note: the adaptive hierarchical B-spline (HBS) implementation that
+%   extends this polynomial comparison requires the GeoPDEs library for MATLAB.
+%   Available at: https://rafavzqz.github.io/geopdes/
+%   GeoPDEs functions used in the HBS code:
 %     adaptivity_initialize_laplace, adaptivity_refine,
 %     hspace_subdivision_matrix, op_gradgradu_gradgradv_hier,
 %     sp_eval, hmsh_plot_cells, sp_get_cells.
@@ -76,7 +76,7 @@ config = jsondecode(configText);
 % Load the point-cloud dataset from disk. The loader auto-detects whether
 % the file has 3 columns (clean) or 5 columns (noisy with outlier flags).
 % Coordinates are normalised to [0,1]^2 unless config.dataset.normalize=false.
-% I dati sono nella forma (u,v,f(u,v)) come nel codice HBS originale.
+% Data are in the form (u,v,f(u,v)) as in the original HBS code.
 dataset = adaptivehb.io.load_dataset(config.dataset.path, config.dataset);
 
 % Inject synthetic noise/outliers according to the noise config section.

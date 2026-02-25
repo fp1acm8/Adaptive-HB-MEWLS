@@ -45,8 +45,8 @@ fprintf('=== Adaptive-HB-MEWLS Quick Demo ===\n\n');
 % =====================================================================
 
 % Build the full path to the glacier.txt dataset shipped with the repo.
-% I dati sono nella forma (u,v,f(u,v)), formato compatibile con il
-% dominio [0,1]x[0,1] del codice HBS (geo_square.txt).
+% Data are in the form (u,v,f(u,v)), compatible with the
+% [0,1]x[0,1] domain of the HBS code (geo_square.txt).
 dataPath = fullfile(repoRoot, 'data', 'glacier.txt');
 
 % Inform the user which file is being loaded (aids troubleshooting).
@@ -83,12 +83,12 @@ fprintf('  Noise applied: Gaussian (sigma=%.2f, outliers=%.0f%%)\n', ...
     noiseCfg.standardDeviation, noiseCfg.outlierFraction * 100);
 
 % =====================================================================
-%  Step 3: Run both solvers (OLS e MEWLS) on the noisy dataset
+%  Step 3: Run both solvers (OLS and MEWLS) on the noisy dataset
 % =====================================================================
 
-% Massimo grado del polinomio. I solver eseguono d = 1..degree,
-% costruendo la matrice di design Phi_d ad ogni grado.
-% degree 3 => 10 funzioni base: M = (3+1)(3+2)/2 = 10.
+% Maximum polynomial degree. The solvers sweep d = 1..degree,
+% building the design matrix Phi_d at each degree.
+% degree 3 => 10 basis functions: M = (3+1)(3+2)/2 = 10.
 degree = 3;
 
 % Inform the user before the (potentially slow) solver calls.

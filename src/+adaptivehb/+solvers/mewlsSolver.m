@@ -47,10 +47,10 @@ function result = mewlsSolver(dataset, method_data)
 %           convergence  - table with degree-by-degree error history
 %           weight       - N-by-1 normalised sample weights
 %
-%   Nota: l'implementazione a B-spline gerarchiche adattive (HBS) che
-%   estende questo solver polinomiale richiede la libreria GeoPDEs per MATLAB.
-%   Disponibile su: https://rafavzqz.github.io/geopdes/
-%   La funzione analoga nel codice HBS e':
+%   Note: the adaptive hierarchical B-spline (HBS) implementation that
+%   extends this polynomial solver requires the GeoPDEs library for MATLAB.
+%   Available at: https://rafavzqz.github.io/geopdes/
+%   The equivalent function in the HBS code is:
 %       getcoeff_weighted_least_squares_pen(hspace,hmsh,data,f,lambda,weight)
 %
 %   See also adaptivehb.solvers.leastSquaresSolver,
@@ -95,11 +95,11 @@ end
 % Clamp degree to at least 1 (degree 0 = constant is trivial).
 degree = max(1, method_data.degree);
 
-% Store lambda and penalty in local variables (stile vecchio codice).
-lambda    = method_data.lambda;    % lambda: parametro di scala dei pesi
-alpha_out = method_data.alpha_out; % alpha_out: penalizzazione outlier
+% Store lambda and penalty in local variables.
+lambda    = method_data.lambda;    % weight decay scale parameter
+alpha_out = method_data.alpha_out; % outlier weight penalty factor
 
-% --- Extract data vectors for readability (stile vecchio codice) ------
+% --- Extract data vectors for readability --------------------------------
 data       = dataset.data;       % N-by-2 coordinate matrix
 f          = dataset.f;          % N-by-1 observed values
 f_true     = dataset.f_true;     % N-by-1 true values

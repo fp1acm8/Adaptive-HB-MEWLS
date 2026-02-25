@@ -26,10 +26,10 @@ function result = leastSquaresSolver(dataset, method_data)
 %           metrics      - struct with rmse, maxAbsError, mae for the final degree
 %           convergence  - table with columns degree, rmse, maxAbsError, mae
 %
-%   Nota: l'implementazione a B-spline gerarchiche adattive (HBS) che
-%   estende questo solver polinomiale richiede la libreria GeoPDEs per MATLAB.
-%   Disponibile su: https://rafavzqz.github.io/geopdes/
-%   La funzione analoga nel codice HBS e':
+%   Note: the adaptive hierarchical B-spline (HBS) implementation that
+%   extends this polynomial solver requires the GeoPDEs library for MATLAB.
+%   Available at: https://rafavzqz.github.io/geopdes/
+%   The equivalent function in the HBS code is:
 %       getcoeff_weighted_least_squares_pen(hspace,hmsh,data,f,0,weight)
 %
 %   See also adaptivehb.solvers.mewlsSolver,
@@ -56,10 +56,10 @@ end
 % Clamp to at least 1 (degree 0 = constant is trivial).
 degree = max(1, method_data.degree);
 
-% --- Extract data vectors for readability (stile vecchio codice) ------
+% --- Extract data vectors for readability --------------------------------
 data = dataset.data;    % N-by-2 coordinate matrix
 f    = dataset.f;       % N-by-1 observed values
-f_true = dataset.f_true; % N-by-1 true values (per il calcolo degli errori)
+f_true = dataset.f_true; % N-by-1 true values (for error metric computation)
 
 % --- Polynomial degree sweep ------------------------------------------
 % Fit polynomials of total degree d = 1, 2, ..., degree and record
